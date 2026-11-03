@@ -54,6 +54,12 @@ public final class MainActivity extends Activity {
     private boolean loadFailed;
     private final DiagnosticLog diagnostics = new DiagnosticLog();
     private static final int EXPORT_REPORT = 42;
+    private final MovieNavigation movieNavigation = new MovieNavigation();
+    private final android.os.Handler sessionHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean alive = true;
+    private boolean resumed = true;
+    private int pageGeneration;
+
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle state) {
@@ -89,7 +95,7 @@ public final class MainActivity extends Activity {
         button(input, "Otwórz", () -> openInput(address.getText().toString()));
         content.addView(input);
         LinearLayout actions = new LinearLayout(this);
-        button(actions, "Start", () -> web.loadUrl(HOME));
+        button(actions, "Wyniki", this::showSearch);
         button(actions, "Odśwież", () -> web.reload());
         button(actions, "★", this::bookmark);
         button(actions, "Lista", this::showBookmarks);
@@ -99,9 +105,11 @@ public final class MainActivity extends Activity {
         content.addView(scroll);
         LinearLayout tools = new LinearLayout(this);
         button(tools, "Widok filmu", this::focusPlayer);
-        button(tools, "Google", this::searchGoogle);
+        button(tools, "Wróć do filmu", () -> { if (movieNavigation.target() != null) web.loadUrl(movieNavigation.target()); });
         button(tools, "Diagnostyka", this::showDiagnostics);
-        content.addView(tools);
+        android.widget.HorizontalScrollView toolsScroll = new android.widget.HorizontalScrollView(this);
+        toolsScroll.addView(tools);
+        content.addView(toolsScroll);
         status = new TextView(this);
         status.setTextColor(Color.LTGRAY);
         status.setTextSize(12);
@@ -125,7 +133,7 @@ public final class MainActivity extends Activity {
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         installDiagnostics();
         diagnostics.add("app.start", HOME, 0);
         web.setWebViewClient(new WebViewClient() {
@@ -157,6 +165,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 loadFailed = false;
+                ++pageGeneration;
                 diagnostics.add("page.start", url, 0);
                 address.setText(url);
                 status.setText("Ładowanie…");
@@ -167,6 +176,10 @@ public final class MainActivity extends Activity {
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
+                if (UrlPolicy.isHome(url) && movieNavigation.target() != null) {
+                    status.setText("Serwis otworzył stronę główną. Zachowuję wybrany film…");
+                    returnToMovie(pageGeneration, 0);
+                }
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 diagnostics.add("network.error", request.getUrl().toString(), error.getErrorCode());
@@ -225,9 +238,11 @@ public final class MainActivity extends Activity {
             }
             return false;
         });
+        if (state != null) movieNavigation.restore(state.getString("selectedMovie"), state.getBoolean("retryUsed"));
         String shared = sharedUrl(getIntent());
-        if (shared != null) web.loadUrl(shared);
-        else if (state == null || web.restoreState(state) == null) web.loadUrl(HOME);
+        if (state != null && web.restoreState(state) != null) { /* Restore the current session page. */ }
+        else if (shared != null) { movieNavigation.select(shared); web.loadUrl(shared); }
+        else web.loadUrl(HOME);
     }
 
     private boolean allowed(String value) { return UrlPolicy.allowed(value); }
@@ -272,16 +287,31 @@ public final class MainActivity extends Activity {
             }
         });
     }
-    private void searchGoogle() {
-        EditText query = new EditText(this);
-        query.setHint("Tytuł filmu");
-        new AlertDialog.Builder(this).setTitle("Szukaj filmu w Google").setView(query)
-            .setMessage("Wyniki otworzą się w przeglądarce. Udostępnij znaleziony link do VideoPlayer.")
-            .setPositiveButton("Szukaj", (d, w) -> {
-                String title = query.getText().toString().trim();
-                if (!title.isEmpty()) external("https://www.google.com/search?q="
-                    + Uri.encode(title + " vider (site:vider.info OR site:vider.pl)"));
-            }).setNegativeButton("Anuluj", null).show();
+    private void showSearch() {
+        startActivity(new Intent(this, SearchActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        finish();
+    }
+    private void returnToMovie(int generation, int attempt) {
+        if (!alive || !resumed || generation != pageGeneration || attempt > 45 || !UrlPolicy.isHome(web.getUrl())) return;
+        String check = "(function(){return Array.from(document.querySelectorAll('#qc-cmp2-ui,#onetrust-banner-sdk,.qc-cmp2-consent-info')).some(function(e){return e.getBoundingClientRect().height>0 && getComputedStyle(e).visibility!=='hidden';});}())";
+        web.evaluateJavascript(check, result -> {
+            if (!alive || !resumed || generation != pageGeneration) return;
+            boolean consentVisible = "true".equals(result);
+            String target = movieNavigation.retryFrom(web.getUrl(), consentVisible);
+            if (target != null) {
+                sessionHandler.postDelayed(() -> {
+                    if (alive && resumed && generation == pageGeneration && UrlPolicy.isHome(web.getUrl())) {
+                        diagnostics.add("movie.return_after_home", target, 0);
+                        CookieManager.getInstance().flush();
+                        web.loadUrl(target);
+                    }
+                }, 1200);
+            } else if (consentVisible && !movieNavigation.retryUsed()) {
+                sessionHandler.postDelayed(() -> returnToMovie(generation, attempt + 1), 2000);
+            } else {
+                status.setText("Jeśli serwis zatrzymał się na stronie głównej, dotknij „Wróć do filmu”.");
+            }
+        });
     }
     private void showDiagnostics() {
         new AlertDialog.Builder(this).setTitle("Diagnostyka • " + diagnostics.size() + " zdarzeń")
@@ -313,9 +343,12 @@ public final class MainActivity extends Activity {
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
             .hideSoftInputFromWindow(address.getWindowToken(), 0);
         web.requestFocus();
+        movieNavigation.select(value);
         web.loadUrl(value);
     }
     private String sharedUrl(Intent intent) {
+        if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null
+                && allowed(intent.getData().toString())) return intent.getData().toString();
         if (!Intent.ACTION_SEND.equals(intent.getAction())) return null;
         String value = intent.getStringExtra(Intent.EXTRA_TEXT);
         if (value != null && allowed(value.trim())) return value.trim();
@@ -372,10 +405,25 @@ public final class MainActivity extends Activity {
         else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
-    @Override protected void onSaveInstanceState(Bundle out) { web.saveState(out); super.onSaveInstanceState(out); }
-    @Override protected void onPause() { web.onPause(); CookieManager.getInstance().flush(); super.onPause(); }
-    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
+    @Override protected void onSaveInstanceState(Bundle out) {
+        out.putString("selectedMovie", movieNavigation.target());
+        out.putBoolean("retryUsed", movieNavigation.retryUsed());
+        web.saveState(out); super.onSaveInstanceState(out);
+    }
+    @Override protected void onPause() {
+        resumed = false; sessionHandler.removeCallbacksAndMessages(null);
+        web.onPause(); CookieManager.getInstance().flush(); super.onPause();
+    }
+    @Override protected void onResume() {
+        super.onResume(); resumed = true;
+        if (web != null) {
+            web.onResume();
+            if (UrlPolicy.isHome(web.getUrl()) && movieNavigation.target() != null) returnToMovie(pageGeneration, 0);
+        }
+    }
     @Override protected void onDestroy() {
+        alive = false;
+        sessionHandler.removeCallbacksAndMessages(null);
         exitFullscreen();
         content.removeView(web);
         web.stopLoading();

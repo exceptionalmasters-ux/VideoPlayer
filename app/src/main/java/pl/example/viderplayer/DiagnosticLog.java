@@ -52,7 +52,7 @@ public final class DiagnosticLog {
             report.put("androidApi", android.os.Build.VERSION.SDK_INT);
             android.content.pm.PackageInfo pkg = android.webkit.WebView.getCurrentWebViewPackage();
             report.put("webViewVersion", pkg == null ? "unknown" : pkg.versionName);
-            report.put("cookiesThirdParty", false);
+            report.put("cookiesThirdParty", true);
             report.put("note", "No cookies, headers, page text, console messages or URL query parameters are recorded. Events from the page are untrusted observations.");
             JSONArray data = new JSONArray();
             for (JSONObject entry : entries) data.put(entry);

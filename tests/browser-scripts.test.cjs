@@ -66,3 +66,50 @@ test('focus does nothing when no player exists', () => {
   const document = {getElementById: () => null, querySelector: () => null};
   assert.equal(vm.runInNewContext(asset('focus-player.js'), {document}), 'missing');
 });
+
+function searchFixture(entries) {
+  const anchors = entries.map(entry => ({
+    textContent: entry.text || '',
+    getAttribute(name) { return name === 'href' ? entry.href : (name === 'aria-label' ? entry.label : null); },
+    querySelector(selector) {
+      if (selector === 'img') return entry.image ? {src: entry.image} : null;
+      return entry.heading ? {textContent: entry.heading} : null;
+    }
+  }));
+  return JSON.parse(vm.runInNewContext(asset('search-results.js'), {
+    document: {querySelectorAll: () => anchors},
+    location: {href: 'https://www.google.com/search?q=movie'}, URL
+  }));
+}
+test('search extracts movie cards from direct and Google redirect links, deduplicating domains', () => {
+  const result = searchFixture([
+    {href:'https://vider.info/vid/+fexample?tracking=private', heading:'Maverick', image:'https://img.vider.info/poster.png'},
+    {href:'https://www.google.com/url?q=https%3A%2F%2Fvider.pl%2Fvid%2F%2Bfexample', heading:'Duplicate'},
+    {href:'/url?url=https%3A%2F%2Fvider.pl%2Fvid%2Ftitle%2Bfother', heading:'Other movie'}
+  ]);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].url, 'https://vider.info/vid/+fexample');
+  assert.equal(result[0].title, 'Maverick');
+  assert.equal(result[0].thumbnail, 'https://img.vider.info/poster.png');
+  assert.equal(result[1].url, 'https://vider.pl/vid/title+fother');
+});
+test('search rejects directories, lookalike domains, credentials and non-HTTPS targets', () => {
+  assert.equal(searchFixture([
+    {href:'https://vider.info.evil.test/vid/+fexample', heading:'Wrong host'},
+    {href:'https://vider.pl/dir/+dexample', heading:'Directory'},
+    {href:'https://user:secret@vider.pl/vid/+fexample', heading:'Credentials'},
+    {href:'http://vider.info/vid/+fexample', heading:'HTTP'},
+    {href:'javascript:alert(1)', heading:'Script'},
+    {href:'https://example.org/', heading:'Other site'}
+  ]).length, 0);
+});
+test('search does not invent posters and limits untrusted text and image data', () => {
+  const result = searchFixture([
+    {href:'https://vider.pl/vid/+fexample', heading:'A'.repeat(400), image:'data:image/png;base64,'+'X'.repeat(17000)},
+    {href:'https://vider.pl/vid/+fother', text:' Other   film '}
+  ]);
+  assert.equal(result[0].title.length, 180);
+  assert.equal(result[0].thumbnail, '');
+  assert.equal(result[1].title, 'Other film');
+  assert.equal(result[1].thumbnail, '');
+});

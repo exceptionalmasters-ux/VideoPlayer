@@ -30,6 +30,11 @@ jobs:
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Test browser scripts
         run: node --test tests/browser-scripts.test.cjs
+      - name: Restore test signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: videoplayer-test-signing-v1
       - name: Build, unit tests and lint
         run: gradle --no-daemon --console=plain testDebugUnitTest lintDebug assembleDebug
       - name: Upload test APK

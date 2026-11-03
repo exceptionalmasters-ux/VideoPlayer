@@ -16,6 +16,36 @@ public final class UrlPolicy {
                 && HOSTS.contains(uri.getHost().toLowerCase(Locale.ROOT));
         } catch (RuntimeException e) { return false; }
     }
+    public static boolean isMovie(String value) {
+        if (!allowed(value)) return false;
+        try { return URI.create(value).getPath().matches("/vid/[^/]*\\+f[A-Za-z0-9]+/?"); }
+        catch (RuntimeException e) { return false; }
+    }
+    public static boolean isHome(String value) {
+        if (!allowed(value)) return false;
+        String path = URI.create(value).getPath();
+        return path == null || path.isEmpty() || path.equals("/");
+    }
+    public static boolean searchPage(String value) {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost();
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getRawUserInfo() == null
+                && (uri.getPort() == -1 || uri.getPort() == 443) && host != null
+                && (host.equals("www.google.com") || host.equals("google.com")
+                    || host.equals("www.google.pl") || host.equals("google.pl")
+                    || host.equals("consent.google.com") || host.equals("consent.google.pl"));
+        } catch (RuntimeException e) { return false; }
+    }
+    public static boolean thumbnail(String value) {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost();
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getRawUserInfo() == null
+                && (uri.getPort() == -1 || uri.getPort() == 443) && host != null
+                && (host.equals("img.vider.info") || host.equals("gstatic.com") || host.endsWith(".gstatic.com"));
+        } catch (RuntimeException e) { return false; }
+    }
     public static String redact(String value) {
         try {
             URI uri = URI.create(value);
