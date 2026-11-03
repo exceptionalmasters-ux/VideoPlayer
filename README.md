@@ -58,4 +58,6 @@ APK po udanej kompilacji: `app/build/outputs/apk/debug/app-debug.apk`. Projekt m
 
 ## Stan weryfikacji
 
-Lokalnie przeszły trzy testy skryptów (dynamiczne wykrywanie wideo, ukrywanie i przywracanie otoczenia bez wymiany iframe, brak odtwarzacza), test wykonania polityki URL na JVM oraz kontrola składni XML i skryptu Python. Lokalna kompilacja Androida i pełny zestaw JUnit/Lint nie zostały wykonane — wymagają Android SDK i zależności. Workflow jest przygotowany do wykonania tych kontroli na GitHub. Odnotowany wynik należy uaktualnić po pierwszym przebiegu CI. Odtwarzanie Vider i układ na urządzeniu nie zostały jeszcze sprawdzone.
+3 listopada 2026 kompilacja w GitHub Actions zakończyła się powodzeniem: trzy testy JavaScript, pięć testów JUnit polityki adresów, Android Lint i budowanie debug APK. Wynik: https://github.com/exceptionalmasters-ux/VideoPlayer/actions/runs/41723557082 (commit a13f0f7cd83c40398f9ab1565009eb4776a4e5dd). APK jest dostępny w artefakcie VideoPlayer-debug przez 14 dni od uruchomienia. Kolejny push lub ręczne Run workflow odtwarza build.
+
+Lokalnie sprawdzono również składnię Java, XML, Python i YAML oraz wykonanie polityki URL na JVM. Odtwarzanie Vider, logowanie i układ na rzeczywistym telefonie pozostają do sprawdzenia.
