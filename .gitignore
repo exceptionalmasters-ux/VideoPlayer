@@ -5,3 +5,4 @@
 *.iml
 /.tools/
 /__pycache__/
+/.ci-signing/
