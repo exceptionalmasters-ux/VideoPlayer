@@ -34,14 +34,31 @@ final class ThumbnailLoader {
                     byte[] html = request(movie, false, userAgent, 768 * 1024);
                     if (html != null) {
                         org.jsoup.nodes.Document doc = Jsoup.parse(new String(html, java.nio.charset.StandardCharsets.UTF_8), movie);
-                        Element meta = doc.selectFirst("meta[property=og:image], meta[name=og:image], link[rel=image_src]");
-                        if (meta != null) result = image(meta.hasAttr("content") ? meta.attr("abs:content") : meta.attr("abs:href"), userAgent);
+                        result = image(poster(doc), userAgent);
+                        if (result == null) {
+                            Element frame = doc.selectFirst(".video-frame iframe[src]");
+                            String embed = frame == null ? "" : frame.attr("abs:src");
+                            if (UrlPolicy.allowed(embed) && new java.net.URI(embed).getPath().startsWith("/embed/video/")) {
+                                byte[] embeddedHtml = request(embed, false, userAgent, 768 * 1024, movie);
+                                if (embeddedHtml != null) {
+                                    org.jsoup.nodes.Document player = Jsoup.parse(new String(embeddedHtml,
+                                        java.nio.charset.StandardCharsets.UTF_8), embed);
+                                    result = image(poster(player), userAgent);
+                                }
+                            }
+                        }
                     }
                 }
             } catch (Exception ignored) { /* Keep the neutral play thumbnail on failure. */ }
             final Bitmap bitmap = result;
             if (!stopped && epoch == generation && bitmap != null) ui.post(() -> { if (!stopped && epoch == generation) target.setImageBitmap(bitmap); });
         });
+    }
+    static String poster(org.jsoup.nodes.Document doc) {
+        Element meta = doc.selectFirst("meta[property=og:image], meta[name=og:image], link[rel=image_src]");
+        if (meta != null) return meta.hasAttr("content") ? meta.attr("abs:content") : meta.attr("abs:href");
+        Element video = doc.selectFirst("video[poster]");
+        return video == null ? "" : video.attr("abs:poster");
     }
     private Bitmap image(String source, String userAgent) throws Exception {
         if (source == null || source.isEmpty()) return null;
@@ -62,6 +79,9 @@ final class ThumbnailLoader {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
     }
     private byte[] request(String start, boolean image, String userAgent, int limit) throws Exception {
+        return request(start, image, userAgent, limit, null);
+    }
+    private byte[] request(String start, boolean image, String userAgent, int limit, String referrer) throws Exception {
         String address = start;
         for (int hop = 0; hop < 4 && !stopped; hop++) {
             if (image ? !UrlPolicy.thumbnail(address) : !UrlPolicy.allowed(address)) return null;
@@ -71,6 +91,7 @@ final class ThumbnailLoader {
                 connection.setConnectTimeout(8000);
                 connection.setReadTimeout(8000);
                 connection.setRequestProperty("User-Agent", userAgent);
+                if (!image && UrlPolicy.allowed(referrer)) connection.setRequestProperty("Referer", referrer);
                 // Credentials go only to the matching Vider origin. Never forward them to image hosts.
                 if (!image) {
                     String cookie = CookieManager.getInstance().getCookie(address);
