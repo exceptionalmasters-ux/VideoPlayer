@@ -30,11 +30,7 @@ public final class UrlPolicyTest {
         assertEquals("[omitted]", UrlPolicy.redact("data:text/html,private"));
         assertEquals("[omitted]", UrlPolicy.redact(null));
     }
-    @Test public void restrictsSearchNavigationAndThumbnailDownloads() {
-        assertTrue(UrlPolicy.searchPage("https://www.google.com/search?q=test"));
-        assertTrue(UrlPolicy.searchPage("https://consent.google.com/"));
-        assertFalse(UrlPolicy.searchPage("https://google.com.evil.test/"));
-        assertFalse(UrlPolicy.searchPage("https://user:secret@www.google.com/"));
+    @Test public void restrictsThumbnailDownloads() {
         assertTrue(UrlPolicy.thumbnail("https://img.vider.info/i/example.png"));
         assertTrue(UrlPolicy.thumbnail("https://encrypted-tbn0.gstatic.com/image"));
         assertFalse(UrlPolicy.thumbnail("https://gstatic.com.evil.test/image"));

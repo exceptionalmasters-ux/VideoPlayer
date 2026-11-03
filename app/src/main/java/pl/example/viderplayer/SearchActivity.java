@@ -28,7 +28,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 import java.nio.charset.StandardCharsets;
 
-/** Native search screen. Google runs in its own WebView; movie pages use the player Activity. */
+/** Native-only results UI; the site search runs in an invisible WebView. */
 public final class SearchActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ThumbnailLoader thumbnails = new ThumbnailLoader();
@@ -40,6 +40,14 @@ public final class SearchActivity extends Activity {
     private JSONArray results = new JSONArray();
     private int scanToken;
     private boolean active = true;
+    private final DiagnosticLog diagnostics = new DiagnosticLog();
+    private static final int EXPORT_REPORT = 43;
+    private FrameLayout engineHost;
+    private AlertDialog verificationDialog;
+    private String requestedSearch;
+    private boolean searchReturnUsed;
+    private long lastSearchAt;
+    private int lastHttpError;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle saved) {
@@ -65,6 +73,7 @@ public final class SearchActivity extends Activity {
         input.setPadding(dp(12), 0, dp(12), 0);
         query = new EditText(this);
         query.setSingleLine(true);
+        query.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});
         query.setHint("Tytuł filmu, np. Maverick");
         query.setTextSize(16);
         query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
@@ -73,16 +82,19 @@ public final class SearchActivity extends Activity {
         root.addView(input);
         LinearLayout actions = new LinearLayout(this);
         addButton(actions, "Mam link", this::pasteLink);
-        addButton(actions, "Strona wyników", this::showSource);
+        addButton(actions, "Raport", this::exportReport);
         root.addView(actions);
-        status = text("Wpisz tytuł. Wyniki z Google będą pokazane tutaj jako kafelki.", 13, Color.LTGRAY);
+        status = text("Wpisz tytuł. Filmy pokażą się tutaj jako miniatury.", 13, Color.LTGRAY);
         status.setPadding(dp(16), dp(8), dp(16), dp(10));
         root.addView(status);
         FrameLayout workspace = new FrameLayout(this);
         root.addView(workspace, new LinearLayout.LayoutParams(-1, 0, 1));
         engine = new WebView(this);
-        workspace.addView(engine, new FrameLayout.LayoutParams(-1, -1));
+        engineHost = new FrameLayout(this);
+        workspace.addView(engineHost, new FrameLayout.LayoutParams(-1, -1));
+        engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
         engine.setVisibility(View.INVISIBLE);
+        engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         WebSettings settings = engine.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -92,7 +104,7 @@ public final class SearchActivity extends Activity {
         settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(engine, false);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(engine, true);
         resultsView = new ScrollView(this);
         grid = new GridLayout(this);
         grid.setColumnCount(2);
@@ -104,16 +116,24 @@ public final class SearchActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return !"https".equals(request.getUrl().getScheme());
                 String target = request.getUrl().toString();
-                if (UrlPolicy.isMovie(target)) { openMovie(target); return true; }
-                return !UrlPolicy.searchPage(target);
+                // A background navigation can never open a movie or launch another app.
+                return !UrlPolicy.allowed(target);
             }
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
-                if (UrlPolicy.searchPage(url)) inspect(++scanToken, 0);
+                diagnostics.add("search.page", url, 0);
+                if (UrlPolicy.allowed(url)) inspect(++scanToken, 0);
+            }
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, android.webkit.WebResourceResponse response) {
+                if (request.isForMainFrame()) {
+                    lastHttpError = response.getStatusCode();
+                    diagnostics.add("search.http_error", request.getUrl().toString(), lastHttpError);
+                }
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
-                    status.setText("Nie udało się połączyć z wyszukiwarką. Sprawdź internet i spróbuj ponownie.");
+                    diagnostics.add("search.network_error", request.getUrl().toString(), error.getErrorCode());
+                    status.setText("Nie udało się połączyć. Spróbuj ponownie; raport pomoże ustalić przyczynę.");
                 }
             }
         });
@@ -124,6 +144,8 @@ public final class SearchActivity extends Activity {
         if (saved != null) {
             query.setText(saved.getString("query", ""));
             try { results = new JSONArray(saved.getString("results", "[]")); } catch (Exception ignored) { }
+            requestedSearch = saved.getString("requestedSearch");
+            searchReturnUsed = saved.getBoolean("searchReturnUsed");
             engine.restoreState(saved);
             if (results.length() > 0) render();
             else if (!query.getText().toString().trim().isEmpty()) search();
@@ -132,6 +154,12 @@ public final class SearchActivity extends Activity {
     private void search() {
         String title = query.getText().toString().trim();
         if (title.isEmpty()) { query.setError("Wpisz tytuł filmu"); return; }
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (lastSearchAt != 0 && now - lastSearchAt < 2000) {
+            status.setText("Poczekaj chwilę przed kolejnym wyszukiwaniem."); return;
+        }
+        lastSearchAt = now;
+        lastHttpError = 0;
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(), 0);
         query.clearFocus();
         results = new JSONArray();
@@ -141,11 +169,44 @@ public final class SearchActivity extends Activity {
         engine.setVisibility(View.INVISIBLE);
         status.setText("Szukam filmów…");
         ++scanToken;
-        String expression = title + " (site:vider.info/vid/ OR site:vider.pl/vid/)";
-        engine.loadUrl("https://www.google.com/search?hl=pl&q=" + Uri.encode(expression));
+        // Advertised by the site's public /opensearch.xml, not a guessed endpoint.
+        requestedSearch = "https://vider.info/search/all/" + Uri.encode(title);
+        searchReturnUsed = false;
+        diagnostics.clear();
+        diagnostics.add("search.start", requestedSearch, 0);
+        engine.loadUrl(requestedSearch);
     }
     private void inspect(int token, int attempt) {
-        if (!active || token != scanToken || !UrlPolicy.searchPage(engine.getUrl())) return;
+        if (!active || token != scanToken || !UrlPolicy.allowed(engine.getUrl())) return;
+        engine.evaluateJavascript(asset("search-state.js"), value -> {
+            if (!active || token != scanToken) return;
+            String stage = "results";
+            try {
+                JSONObject state = new JSONObject((String) new JSONTokener(value).nextValue());
+                stage = state.optString("stage", "results");
+                if (attempt == 0) diagnostics.add("search.dom_links", null, Math.min(10000, state.optInt("anchors")));
+            } catch (Exception ignored) { }
+            if (!"results".equals(stage)) {
+                diagnostics.add("search.verification_required", null,
+                    "verification".equals(stage) ? 1 : ("consent".equals(stage) ? 2 : 3));
+                status.setText("Serwis wymaga potwierdzenia. Po nim wrócimy do miniatur.");
+                showVerification();
+                if (attempt < 120) handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
+                return;
+            }
+            if (UrlPolicy.isHome(engine.getUrl()) && requestedSearch != null) {
+                if (!searchReturnUsed) {
+                    searchReturnUsed = true;
+                    CookieManager.getInstance().flush();
+                    diagnostics.add("search.return_after_home", requestedSearch, 0);
+                    engine.loadUrl(requestedSearch);
+                } else status.setText("Serwis przekierował wyszukiwanie na stronę główną. Spróbuj ponownie lub wyślij raport.");
+                return;
+            }
+            readCards(token, attempt);
+        });
+    }
+    private void readCards(int token, int attempt) {
         engine.evaluateJavascript(asset("search-results.js"), value -> {
             if (!active || token != scanToken) return;
             try {
@@ -165,23 +226,62 @@ public final class SearchActivity extends Activity {
                         item.put("title", name.substring(0, Math.min(180, name.length())));
                         accepted.put(item);
                     }
-                    if (accepted.length() > 0) { results = accepted; render(); return; }
+                    if (accepted.length() > 0) {
+                        diagnostics.add("search.cards", null, accepted.length());
+                        results = accepted; render(); return;
+                    }
                 }
-            } catch (Exception ignored) { }
-            if (attempt >= 2) {
-                engine.setVisibility(View.VISIBLE);
-                resultsView.setVisibility(View.GONE);
-                status.setText("Nie udało się jeszcze odczytać kafelków. Jeśli Google prosi o zgodę lub weryfikację, dokończ ją poniżej. Link filmu otworzy się od razu w aplikacji.");
+            } catch (Exception ignored) { diagnostics.add("search.parse_error", null, 0); }
+            if (attempt < 12) {
+                handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
+            } else {
+                dismissVerification();
+                diagnostics.add("search.empty_or_unrecognized", engine.getUrl(), 0);
+                status.setText(lastHttpError >= 400
+                    ? "Serwis odpowiedział błędem HTTP " + lastHttpError + ". Wyślij raport wyszukiwania, jeśli problem się powtarza."
+                    : "Brak odczytanych filmów. Spróbuj krótszego tytułu lub wyślij raport.");
             }
-            if (attempt < 20) handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
         });
+    }
+    private void showVerification() {
+        if (verificationDialog != null || !active) return;
+        android.view.ViewGroup parent = (android.view.ViewGroup) engine.getParent();
+        if (parent != null) parent.removeView(engine);
+        FrameLayout panel = new FrameLayout(this);
+        panel.addView(engine, new FrameLayout.LayoutParams(-1, -1));
+        engine.setVisibility(View.VISIBLE);
+        engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        verificationDialog = new AlertDialog.Builder(this)
+            .setTitle("Potwierdź dostęp do Vider")
+            .setMessage("Jeśli serwis prosi o kod, zgodę lub logowanie, wykonaj ten krok tutaj. Potem wrócimy do miniatur.")
+            .setView(panel)
+            .setPositiveButton("Gotowe", (d, w) -> handler.postDelayed(() -> inspect(++scanToken, 0), 300))
+            .setNegativeButton("Anuluj", (d, w) -> { ++scanToken; status.setText("Weryfikacja przerwana. Możesz ponowić wyszukiwanie."); })
+            .create();
+        verificationDialog.setOnCancelListener(dialog -> { ++scanToken; status.setText("Weryfikacja przerwana. Możesz ponowić wyszukiwanie."); });
+        verificationDialog.setOnDismissListener(dialog -> {
+            android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
+            if (owner != null) owner.removeView(engine);
+            engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
+            engine.setVisibility(View.INVISIBLE);
+            engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            verificationDialog = null;
+            CookieManager.getInstance().flush();
+        });
+        verificationDialog.show();
+        android.view.Window window = verificationDialog.getWindow();
+        if (window != null) window.setLayout(-1, Math.round(getResources().getDisplayMetrics().heightPixels * 0.85f));
+    }
+    private void dismissVerification() {
+        if (verificationDialog != null) verificationDialog.dismiss();
     }
     private void render() {
         thumbnails.nextGeneration();
+        dismissVerification();
         engine.setVisibility(View.INVISIBLE);
         resultsView.setVisibility(View.VISIBLE);
         grid.removeAllViews();
-        status.setText("Wyniki Google · " + results.length() + " · dotknij miniatury, aby otworzyć film");
+        status.setText("Znalezione filmy · " + results.length() + " · dotknij miniatury, aby otworzyć film");
         int width = (getResources().getDisplayMetrics().widthPixels - dp(40)) / 2;
         for (int i = 0; i < results.length(); i++) {
             JSONObject result = results.optJSONObject(i);
@@ -226,12 +326,26 @@ public final class SearchActivity extends Activity {
         CookieManager.getInstance().flush();
         startActivity(new Intent(this, MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)));
     }
-    private void showSource() {
-        if (engine.getUrl() == null) { search(); return; }
-        boolean showing = engine.getVisibility() == View.VISIBLE;
-        engine.setVisibility(showing ? View.INVISIBLE : View.VISIBLE);
-        resultsView.setVisibility(showing ? View.VISIBLE : View.GONE);
-        if (showing) inspect(++scanToken, 0);
+    private void exportReport() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.putExtra(Intent.EXTRA_TITLE, "videoplayer-wyszukiwanie.json");
+        try { startActivityForResult(intent, EXPORT_REPORT); }
+        catch (android.content.ActivityNotFoundException e) {
+            Toast.makeText(this, "Nie znaleziono miejsca zapisu raportu.", Toast.LENGTH_LONG).show();
+        }
+    }
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != EXPORT_REPORT || result != RESULT_OK || data == null || data.getData() == null) return;
+        try (java.io.OutputStream out = getContentResolver().openOutputStream(data.getData(), "wt")) {
+            if (out == null) throw new java.io.IOException();
+            out.write(diagnostics.export().getBytes(StandardCharsets.UTF_8));
+            Toast.makeText(this, "Zapisano raport wyszukiwania.", Toast.LENGTH_LONG).show();
+        } catch (java.io.IOException | SecurityException e) {
+            Toast.makeText(this, "Nie udało się zapisać raportu.", Toast.LENGTH_LONG).show();
+        }
     }
     private void pasteLink() {
         EditText input = new EditText(this);
@@ -252,6 +366,8 @@ public final class SearchActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         out.putString("query", query.getText().toString());
+        out.putString("requestedSearch", requestedSearch);
+        out.putBoolean("searchReturnUsed", searchReturnUsed);
         out.putString("results", results.toString());
         engine.saveState(out);
         super.onSaveInstanceState(out);
@@ -266,7 +382,10 @@ public final class SearchActivity extends Activity {
     }
     @Override protected void onDestroy() {
         active = false; handler.removeCallbacksAndMessages(null); thumbnails.close();
-        ((android.view.ViewGroup) engine.getParent()).removeView(engine); engine.destroy(); super.onDestroy();
+        dismissVerification();
+        android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
+        if (owner != null) owner.removeView(engine);
+        engine.destroy(); super.onDestroy();
     }
     private TextView text(String value, int size, int color) {
         TextView text = new TextView(this); text.setText(value); text.setTextSize(size); text.setTextColor(color); return text;

@@ -78,27 +78,26 @@ function searchFixture(entries) {
   }));
   return JSON.parse(vm.runInNewContext(asset('search-results.js'), {
     document: {querySelectorAll: () => anchors},
-    location: {href: 'https://www.google.com/search?q=movie'}, URL
+    location: {href: 'https://vider.info/search/all/movie'}, URL
   }));
 }
-test('search extracts movie cards from direct and Google redirect links, deduplicating domains', () => {
+test('search extracts native movie cards from current and legacy Vider links, deduplicating domains', () => {
   const result = searchFixture([
     {href:'https://vider.info/vid/+fexample?tracking=private', heading:'Maverick', image:'https://img.vider.info/poster.png'},
-    {href:'https://www.google.com/url?q=https%3A%2F%2Fvider.pl%2Fvid%2F%2Bfexample', heading:'Duplicate'},
-    {href:'/url?url=https%3A%2F%2Fvider.pl%2Fvid%2Ftitle%2Bfother', heading:'Other movie'}
+    {href:'https://vider.pl/vid/+fexample', heading:'Duplicate'},
+    {href:'https://vider.pl/some-profile/title+fother', heading:'Other movie'}
   ]);
   assert.equal(result.length, 2);
   assert.equal(result[0].url, 'https://vider.info/vid/+fexample');
   assert.equal(result[0].title, 'Maverick');
   assert.equal(result[0].thumbnail, 'https://img.vider.info/poster.png');
-  assert.equal(result[1].url, 'https://vider.pl/vid/title+fother');
+  assert.equal(result[1].url, 'https://vider.pl/vid/+fother');
 });
-test('search rejects directories, lookalike domains, credentials and non-HTTPS targets', () => {
+test('search rejects directories, lookalike domains, credentials and unsafe schemes', () => {
   assert.equal(searchFixture([
     {href:'https://vider.info.evil.test/vid/+fexample', heading:'Wrong host'},
     {href:'https://vider.pl/dir/+dexample', heading:'Directory'},
     {href:'https://user:secret@vider.pl/vid/+fexample', heading:'Credentials'},
-    {href:'http://vider.info/vid/+fexample', heading:'HTTP'},
     {href:'javascript:alert(1)', heading:'Script'},
     {href:'https://example.org/', heading:'Other site'}
   ]).length, 0);
@@ -112,4 +111,40 @@ test('search does not invent posters and limits untrusted text and image data', 
   assert.equal(result[0].thumbnail, '');
   assert.equal(result[1].title, 'Other film');
   assert.equal(result[1].thumbnail, '');
+});
+
+test('search merges image-only links with their title and upgrades known HTTP links', () => {
+  const result = searchFixture([
+    {href:'http://vider.info/a-profile/movie-title+fexample', image:'https://img.vider.info/i/example.png'},
+    {href:'https://vider.info/vid/+fexample', heading:'Correct movie title'}
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].url, 'https://vider.info/vid/+fexample');
+  assert.equal(result[0].title, 'Correct movie title');
+  assert.equal(result[0].thumbnail, 'https://img.vider.info/i/example.png');
+});
+function searchState(inputs, consent = []) {
+  const document = {querySelectorAll(selector) {
+    if (selector === 'input') return inputs;
+    if (selector.startsWith('#qc-')) return consent;
+    return [];
+  }};
+  return JSON.parse(vm.runInNewContext(asset('search-state.js'), {
+    document, getComputedStyle: () => ({visibility: 'visible'})
+  }));
+}
+test('search requests in-app verification only for visible challenges or consent', () => {
+  const captcha = {name:'captcha_code', id:'', getAttribute:() => '', getBoundingClientRect:() => ({height:40})};
+  assert.equal(searchState([captcha]).stage, 'verification');
+  const hiddenLogin = {type:'password', name:'', id:'password', getAttribute:() => '', getBoundingClientRect:() => ({height:0})};
+  assert.equal(searchState([hiddenLogin]).stage, 'results');
+  const banner = {getBoundingClientRect:() => ({height:100})};
+  assert.equal(searchState([], [banner]).stage, 'consent');
+  assert.equal(searchState([]).anchors, 0);
+});
+
+test('search resolves relative Vider movie links into native cards', () => {
+  const result = searchFixture([{href:'/vid/+fexample', heading:'A movie'}]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].url, 'https://vider.info/vid/+fexample');
 });

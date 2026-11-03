@@ -18,12 +18,17 @@ import java.util.concurrent.Executors;
 
 /** Fetch only bounded HTML metadata and images. Never request a movie/stream as a thumbnail. */
 final class ThumbnailLoader {
-    private final ExecutorService executor = Executors.newFixedThreadPool(3);
+    private final ExecutorService executor = Executors.newFixedThreadPool(1);
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private final android.util.LruCache<String, Bitmap> cache = new android.util.LruCache<String, Bitmap>(8 * 1024 * 1024) {
+        @Override protected int sizeOf(String key, Bitmap bitmap) { return bitmap.getByteCount(); }
+    };
     private volatile boolean stopped;
     private volatile int generation;
     void nextGeneration() { ++generation; ((java.util.concurrent.ThreadPoolExecutor) executor).getQueue().clear(); }
     void load(ImageView target, String movie, String supplied, String userAgent) {
+        Bitmap cached = cache.get(movie);
+        if (cached != null) { target.setImageBitmap(cached); return; }
         final int epoch = generation;
         executor.execute(() -> {
             if (epoch != generation || stopped) return;
@@ -50,6 +55,7 @@ final class ThumbnailLoader {
                     }
                 }
             } catch (Exception ignored) { /* Keep the neutral play thumbnail on failure. */ }
+            if (result != null) cache.put(movie, result);
             final Bitmap bitmap = result;
             if (!stopped && epoch == generation && bitmap != null) ui.post(() -> { if (!stopped && epoch == generation) target.setImageBitmap(bitmap); });
         });

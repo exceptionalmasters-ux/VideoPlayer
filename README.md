@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.3.0.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.4.0.
 
 ## Co działa w kodzie
 
@@ -8,8 +8,8 @@ Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider o
 - Wklejanie adresu, odbieranie samego linku przez Android „Udostępnij”, cofanie, odświeżanie i lokalne ulubione.
 - Pełny ekran zgłaszany przez odtwarzacz strony i obrót telefonu bez przeładowania Activity.
 - **Widok filmu**: przełącza układ pełnej strony na istniejącą ramkę `.video-frame`. Ramka nie jest przenoszona ani ładowana ponownie. Ponowne dotknięcie przywraca stronę. Obsługa tego układu jest eksperymentalna i zależy od HTML serwisu.
-- **Ekran startowy wyszukiwania**: wpisz tytuł i wybierz Szukaj. Google jest otwierane w osobnym WebView wewnątrz aplikacji. Odczytane linki do filmów są pokazywane jako natywne kafelki; kliknięcie otwiera pełną stronę filmu, bez kopiowania adresu. Wstecz lub „Wyniki” wraca do listy.
-- **Miniatury**: obraz powiązany z wynikiem Google albo obraz z metadanych strony filmu. Jeśli strona nie udostępni obrazu, kafelek zachowuje neutralne tło i ikonę Play — nie podmieniamy go plakatem innego filmu.
+- **Ekran startowy wyszukiwania**: wpisz tytuł i wybierz Szukaj. Wyszukiwanie Vider działa w tle; ekran aplikacji pokazuje wyłącznie natywne kafelki. Kliknięcie otwiera pełną stronę filmu. Nie ma przejścia na stronę Google ani przycisku otwierającego stronę wyników. „Wyniki” wraca do listy.
+- **Miniatury**: obraz powiązany z linkiem na liście Vider albo obraz z metadanych strony filmu lub jego osadzonego odtwarzacza. Jeśli strona nie udostępni obrazu, kafelek zachowuje neutralne tło i ikonę Play — nie podmieniamy go plakatem innego filmu.
 - **Zachowanie sesji**: cookies Vider, w tym cookies firm trzecich potrzebne niektórym osadzonym komponentom, są włączone i zapisywane. Decyzję o zgodzie podejmuje użytkownik w komunikacie serwisu. Wybrany film jest pamiętany podczas przekierowania na stronę główną; aplikacja podejmuje najwyżej jedną automatyczną próbę powrotu po zamknięciu rozpoznanego komunikatu zgody. Jest też przycisk „Wróć do filmu”.
 - **Diagnostyka → Eksportuj JSON**: zapisuje raport przez systemowy wybór miejsca, bez uprawnienia dostępu do całej pamięci telefonu.
 
@@ -27,7 +27,7 @@ Na WebView obsługującym `WEB_MESSAGE_LISTENER` oraz `DOCUMENT_START_SCRIPT` ob
 
 Zanim URL trafi do raportu, usuwane są login/hasło, wszystkie parametry zapytania (np. uid i token), fragment oraz nieznane ścieżki, w tym nazwy profili. Nie rejestrujemy cookies, nagłówków, treści strony, tytułów, historii wyszukiwania ani treści konsoli. Raport nie jest automatycznie wysyłany. Eksportowany plik pozostaje w miejscu wybranym przez użytkownika, a przycisk „Wyczyść raport” usuwa wyłącznie bufor w aplikacji. Bufor znika po zakończeniu procesu.
 
-W WebView filmu cookies firm trzecich są włączone dla zgodności osadzonego odtwarzacza i komponentów zgód. W osobnym WebView wyszukiwarki pozostają wyłączone. Okna pop-up i przejścia poza domeny Vider są blokowane; ręcznie kliknięty link zewnętrzny można otworzyć w przeglądarce po potwierdzeniu. Te ograniczenia mogą wpływać na działanie reklam lub odtwarzacza i są rejestrowane w raporcie. Błędy TLS nie są pomijane, HTTP i dostęp do plików lokalnych są wyłączone. Sesja Chrome nie jest współdzielona z WebView — ewentualne logowanie odbywa się na stronie w aplikacji.
+W WebView filmu cookies firm trzecich są włączone dla zgodności osadzonego odtwarzacza i komponentów zgód. W WebView wyszukiwarki Vider również są włączone, aby zachować ten sam kontekst sesji. Okna pop-up i przejścia poza domeny Vider są blokowane; ręcznie kliknięty link zewnętrzny można otworzyć w przeglądarce po potwierdzeniu. Te ograniczenia mogą wpływać na działanie reklam lub odtwarzacza i są rejestrowane w raporcie. Błędy TLS nie są pomijane, HTTP i dostęp do plików lokalnych są wyłączone. Sesja Chrome nie jest współdzielona z WebView — ewentualne logowanie odbywa się na stronie w aplikacji.
 
 ## APK z GitHub Actions
 
@@ -52,21 +52,26 @@ APK po udanej kompilacji: `app/build/outputs/apk/debug/app-debug.apk`. Projekt m
 
 ## Wyszukiwanie: sposób działania i ograniczenia
 
-Nie trzeba konfigurować klucza API ani kopiować linków z przeglądarki. W tej wersji dostawcą jest zwykła strona Google z zapytaniem o tytuł ograniczonym do `vider.info/vid/` i `vider.pl/vid/`. Parser odczytuje tylko HTTPS i dokładne domeny Vider, odrzuca katalogi oraz usuwa duplikaty filmów. Nie używa oficjalnego płatnego API i zależy od układu wyników wyszukiwarki.
+W wersji 0.4 źródłem jest wyszukiwarka samego Vider. Publiczny plik https://vider.info/opensearch.xml deklaruje szablon `https://vider.info/search/all/{searchTerms}`. Aplikacja korzysta z tego adresu w tle i przekształca odczytane linki na kafelki. Wersja 0.3 błędnie pokazywała stronę Google, gdy parser nie znalazł wyników; to zachowanie i przycisk „Strona wyników” zostały usunięte.
 
-Jeżeli Google wymaga zgody lub weryfikacji albo układ nie daje się odczytać, aplikacja pokazuje stronę wyszukiwarki w tym samym ekranie. Użytkownik sam kończy wymagany krok; kliknięcie linku filmu nadal otwiera go w aplikacji. Przycisk „Strona wyników” pozwala przełączyć widok źródła lub ponowić odczyt kafelków. Brak indeksowanych filmów nie jest zastępowany fikcyjnymi wynikami. Ten mechanizm wymaga sprawdzenia na telefonie; w przyszłości można wymienić dostawcę na udokumentowane API.
+Parser łączy miniaturę i tekst z różnych linków prowadzących do tego samego filmu. Obsługuje krótkie adresy `/vid/+fID` i starsze adresy `/profil/tytul+fID`, normalizując je do strony filmu. Nie wyświetla katalogów jako filmów. Stare indeksowane linki HTTP do dokładnych domen Vider są zamieniane na HTTPS przed otwarciem; inne hosty i schematy są odrzucane.
 
-Miniatury są pobierane w tle w maksymalnie trzech wątkach: HTML do 768 KiB, obraz do 2 MiB, do czterech kontrolowanych przekierowań. HTML jest pobierany tylko ze stron Vider; cookies są dołączane wyłącznie dla odpowiadającej im domeny. Obrazy mogą pochodzić wyłącznie z img.vider.info lub gstatic.com i jego subdomen, albo ograniczonej miniatury data:image. W tym procesie nie są pobierane filmy MP4. Żądania wyszukiwania i tytuły nie trafiają do raportu diagnostycznego; Google otrzymuje wpisane zapytanie jako dostawca wyszukiwania.
+Jeśli wykryta zostanie CAPTCHA, zgoda cookies lub wymagane logowanie, pojawia się oznaczone okno „Potwierdź dostęp do Vider” wewnątrz aplikacji. Użytkownik sam wpisuje kod lub dokonuje wyboru. Po uzyskaniu dostępu aplikacja wraca do kafelków. Nie próbuje automatycznie rozwiązywać CAPTCHA. Przycisk „Gotowe” ponawia odczyt, a „Anuluj” lub Wstecz przerywa weryfikację. Przy błędzie, braku wyników lub nierozpoznanym układzie pozostaje natywny komunikat; strona wyszukiwania nie jest pokazywana jako awaryjny ekran.
+
+Ograniczono równoległość pobierania miniatur do jednego zadania i dodano ich cache w pamięci, aby powtórne wyświetlenie listy nie pobierało ponownie tych samych obrazów. Kolejne wyszukiwania można rozpoczynać co najmniej co dwie sekundy. Nie gwarantuje to braku CAPTCHA: jej wyświetlanie zależy od serwisu i adresu sieciowego.
+
+Przycisk **Raport** na ekranie wyszukiwania eksportuje diagnostykę JSON: kod HTTP, liczbę znalezionych linków/kafelków, etap weryfikacji i przekierowania. Zapytanie, tytuły, treść strony, wpisywane litery CAPTCHA, dane logowania i cookies nie są zapisywane w raporcie. Ścieżka zapytania jest usuwana z adresu przed logowaniem. Raport odtwarzacza pozostaje oddzielnie pod przyciskiem Diagnostyka.
+
+Miniatury są pobierane z linków listy lub metadanych tej samej strony/ramki filmu. HTML do 768 KiB i obrazy do 2 MiB, do czterech kontrolowanych przekierowań. Cookies są dołączane tylko do odpowiadającej im domeny Vider. Nie są pobierane filmy MP4 w celu tworzenia miniatur. Przy braku udostępnionego obrazu pozostaje neutralny kafelek Play.
 
 ## Test na telefonie
 
-1. Jeśli Android odmawia aktualizacji 0.2.0 z powodu podpisu, odinstaluj ją i zainstaluj 0.3.0. Jest to pierwsze przejście na zachowywany podpis testowy; zgody i logowanie trzeba wtedy wykonać ponownie.
-2. Wpisz tytuł, np. Maverick, i dotknij Szukaj. Sprawdź listę kafelków i miniatury. Jeśli pojawi się Google z komunikatem, wybierz zgodę samodzielnie w tym ekranie.
-3. Dotknij kafelka. Sprawdź, czy otwiera się właściwy film, a po ewentualnym przeniesieniu na stronę główną następuje powrót. „Wróć do filmu” pozwala ponowić przejście ręcznie bez szukania linku.
-4. Po uruchomieniu filmu sprawdź „Widok filmu”, pełny ekran i obrót. „Wyniki” wraca do wyszukiwania.
-5. Zamknij i otwórz aplikację, wyszukaj drugi film i sprawdź, czy serwis pamięta decyzję cookies. Nie gwarantujemy zachowania zgody wbrew terminowi ważności lub regułom serwisu; nie kopiujemy cookies pomiędzy domenami .pl i .info.
-6. Jeśli coś nie działa w odtwarzaczu, wybierz Diagnostyka → Eksportuj JSON i podaj objaw. Dla problemów wyszukiwania podaj tytuł oraz czy pojawia się strona Google, brak wyników, czy kafelki bez obrazów.
+1. Zainstaluj 0.4.0 jako aktualizację 0.3.0 — podpis testowy powinien być ten sam, więc nie odinstalowuj poprzedniej aplikacji bez potrzeby. Przejście z 0.2.0 może wymagać odinstalowania z powodu dawnego jednorazowego podpisu.
+2. Wpisz tytuł i dotknij Szukaj. Sprawdź kafelki i miniatury. Ekran nie powinien pokazywać Google ani strony wyszukiwarki Vider.
+3. Jeśli otworzy się „Potwierdź dostęp do Vider”, wpisz kod lub wybierz zgodę samodzielnie. Po zakończeniu powinny pojawić się miniatury.
+4. Dotknij miniatury, uruchom film i sprawdź „Widok filmu”. „Wyniki” wraca do listy.
+5. Jeśli zamiast kafelków jest błąd lub pusta lista, wybierz **Raport** na ekranie wyszukiwania i prześlij JSON z krótkim opisem. Nie trzeba kopiować kodu strony ani odpowiedzi CAPTCHA.
 
 ## Stan weryfikacji
 
-Wersja 0.2.0 została zbudowana w GitHub Actions i odtwarzanie oraz widok filmu zostały potwierdzone przez użytkownika na telefonie. Wersja 0.3.0 dodaje nowy przebieg wyszukiwania, politykę miniatur i mechanizm powrotu po przekierowaniu. Testy parsera, nawigacji i kontroli adresów są wykonywane w CI wraz z Android Lint i kompilacją APK. Wyszukiwanie na żywo, faktyczne obrazy wyników i trwałość zgód wymagają testu na telefonie.
+Odtwarzanie i widok filmu w 0.2 zostały potwierdzone na telefonie przez użytkownika. W 0.3 testy i build przechodziły, ale awaryjne pokazanie strony Google nie spełniało oczekiwanego interfejsu. W 0.4 wyszukiwanie i wyniki są przebudowane zgodnie z powyższym opisem. Testy parsera, wykrywania weryfikacji, nawigacji i polityki adresów są wykonywane razem z Android Lint i kompilacją APK. Środowisko deweloperskie otrzymuje pustą odpowiedź HTTP 404 dla wyszukiwania Vider, dlatego działanie wyszukiwania na żywo wymaga testu na telefonie. Potwierdzono jedynie oficjalny szablon w opensearch.xml; nie traktujemy samej kompilacji jako dowodu działania serwisu.

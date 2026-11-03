@@ -26,17 +26,6 @@ public final class UrlPolicy {
         String path = URI.create(value).getPath();
         return path == null || path.isEmpty() || path.equals("/");
     }
-    public static boolean searchPage(String value) {
-        try {
-            URI uri = URI.create(value);
-            String host = uri.getHost();
-            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getRawUserInfo() == null
-                && (uri.getPort() == -1 || uri.getPort() == 443) && host != null
-                && (host.equals("www.google.com") || host.equals("google.com")
-                    || host.equals("www.google.pl") || host.equals("google.pl")
-                    || host.equals("consent.google.com") || host.equals("consent.google.pl"));
-        } catch (RuntimeException e) { return false; }
-    }
     public static boolean thumbnail(String value) {
         try {
             URI uri = URI.create(value);
