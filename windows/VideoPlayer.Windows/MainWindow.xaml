@@ -22,7 +22,7 @@
     <Grid Grid.Row="4" x:Name="Workspace">
       <wv:WebView2 x:Name="Browser" Visibility="Hidden" DefaultBackgroundColor="Black"/>
       <ScrollViewer x:Name="Results" VerticalScrollBarVisibility="Auto" Padding="20,4,20,20">
-        <StackPanel><Border x:Name="Welcome" Background="#142731" CornerRadius="16" Padding="28" Margin="4,12,4,20"><StackPanel><TextBlock Text="Co dziś oglądamy?" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Wybierz serwis i wpisz tytuł. Wyniki pojawią się jako miniaturki." Margin="0,12,0,0" Foreground="#A5BDC7" TextWrapping="Wrap" FontSize="16"/><TextBlock Text="Możesz też wkleić link do filmu w polu wyszukiwania." Margin="0,8,0,0" Foreground="#79DFC7"/></StackPanel></Border><WrapPanel x:Name="Cards"/></StackPanel>
+        <StackPanel><Border x:Name="Welcome" Background="#142731" CornerRadius="16" Padding="28" Margin="4,12,4,20"><StackPanel><TextBlock x:Name="EmptyHeading" Text="Co dziś oglądamy?" FontSize="28" FontWeight="SemiBold"/><TextBlock x:Name="EmptyDescription" Text="Wybierz serwis i wpisz tytuł. Wyniki pojawią się jako miniaturki." Margin="0,12,0,0" Foreground="#A5BDC7" TextWrapping="Wrap" FontSize="16"/><TextBlock x:Name="EmptyHint" Text="Możesz też wkleić link do filmu w polu wyszukiwania." Margin="0,8,0,0" Foreground="#79DFC7"/></StackPanel></Border><WrapPanel x:Name="Cards"/></StackPanel>
       </ScrollViewer>
     </Grid>
     <DockPanel x:Name="Footer" Grid.Row="5" Background="#14242D" LastChildFill="True" Margin="0,8,0,0">

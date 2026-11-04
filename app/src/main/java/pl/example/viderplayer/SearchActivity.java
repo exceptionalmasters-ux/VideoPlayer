@@ -293,7 +293,7 @@ public final class SearchActivity extends Activity {
         new AlertDialog.Builder(this).setTitle(item.optString("title")).setItems(options,(d,which)->{
             if(which==0)library.toggle(url,item.optString("title"),item.optString("thumbnail"));
             else library.remove("history",url);
-            showCollection(collection);
+            int previousIndex=selectedResultIndex;showCollection(collection);selectedResultIndex=previousIndex;
         }).setNegativeButton("Zamknij",null).show();
     }
     private void selectSource(SiteSource source) {
@@ -732,7 +732,7 @@ public final class SearchActivity extends Activity {
             card.setContentDescription("Odtwórz " + result.optString("title"));
             final int index=i;
             card.setOnClickListener(v -> {selectedResultIndex=index;openMovie(url);});
-            card.setOnLongClickListener(v->{cardActions(result);return true;});
+            card.setOnLongClickListener(v->{selectedResultIndex=index;cardActions(result);return true;});
             thumbnails.load(image, url, result.optString("thumbnail"), engine.getSettings().getUserAgentString());
         }
         if(television){
@@ -746,6 +746,7 @@ public final class SearchActivity extends Activity {
                 card.setOnKeyListener((v,key,event)->{
                     if(key==android.view.KeyEvent.KEYCODE_MENU||key==android.view.KeyEvent.KEYCODE_INFO){if(event.getAction()==android.view.KeyEvent.ACTION_UP)v.performLongClick();return true;}
                     if(key==android.view.KeyEvent.KEYCODE_DPAD_CENTER||key==android.view.KeyEvent.KEYCODE_ENTER){
+                        if(event.getAction()==android.view.KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0)v.setTag(null);
                         if(event.getAction()==android.view.KeyEvent.ACTION_DOWN&&event.getRepeatCount()==1){v.setTag(Boolean.TRUE);v.performLongClick();}
                         if(event.getAction()==android.view.KeyEvent.ACTION_UP){if(!Boolean.TRUE.equals(v.getTag()))v.performClick();v.setTag(null);}
                         return true;
@@ -834,7 +835,7 @@ public final class SearchActivity extends Activity {
     @Override protected void onResume() {
         super.onResume(); active = true;
         TvUi.immersive(this);
-        if(library!=null&&engine!=null&&!"results".equals(collection))showCollection(collection);
+        if(library!=null&&engine!=null&&!"results".equals(collection)){int previousIndex=selectedResultIndex;showCollection(collection);selectedResultIndex=previousIndex;}
         else if(engine!=null&&!searchRunning&&results.length()>0)render();
         if(television&&grid!=null&&grid.getChildCount()>0&&verificationPanel==null)
             grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});

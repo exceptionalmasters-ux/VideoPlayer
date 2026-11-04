@@ -229,6 +229,9 @@ public partial class MainWindow : Window
     {
         Cards.Children.Clear(); Welcome.Visibility = movies.Count==0?Visibility.Visible:Visibility.Collapsed; Results.Visibility = Visibility.Visible; Browser.Visibility = Visibility.Hidden;
         ClearCollection.Visibility=collection=="results"?Visibility.Collapsed:Visibility.Visible;
+        EmptyHeading.Text=collection=="history"?"Historia jest pusta":collection=="favorites"?"Twoje ulubione filmy":"Co dziś oglądamy?";
+        EmptyDescription.Text=collection=="history"?"Tutaj pojawią się ostatnio otwierane filmy.":collection=="favorites"?"Dodaj film do ulubionych przyciskiem ☆ przy kafelku lub ★ w odtwarzaczu.":"Wybierz serwis i wpisz tytuł. Wyniki pojawią się jako miniaturki.";
+        EmptyHint.Visibility=collection=="results"?Visibility.Visible:Visibility.Collapsed;
         foreach (var movie in movies)
         {
             var stack = new StackPanel { Width = 238 };
@@ -246,11 +249,11 @@ public partial class MainWindow : Window
             card.Click += (_, _) => OpenMovie(movie.url,movie);
             var tile=new StackPanel { Width=250,Margin=new Thickness(2) };tile.Children.Add(card);
             var actions=new WrapPanel();
-            var star=new Button { Content=collections?.Favorite(movie.url)==true?"★ Usuń":"☆ Ulubione",Padding=new Thickness(10,7),FontSize=12 };
+            var star=new Button { Content=collections?.Favorite(movie.url)==true?"★ Usuń":"☆ Ulubione",Padding=new Thickness(10,7,10,7),FontSize=12 };
             star.Click+=(_,_)=>{if(CollectionAction(()=>collections?.Toggle(movie)))RefreshCollection();};actions.Children.Add(star);
             if(collection!="results")
             {
-                var remove=new Button { Content=collection=="history"?"Usuń z historii":"Usuń z listy",Padding=new Thickness(10,7),FontSize=12 };
+                var remove=new Button { Content=collection=="history"?"Usuń z historii":"Usuń z listy",Padding=new Thickness(10,7,10,7),FontSize=12 };
                 remove.Click+=(_,_)=>{if(CollectionAction(()=>collections?.Remove(collection,movie.url)))RefreshCollection();};actions.Children.Add(remove);
             }
             tile.Children.Add(actions);Cards.Children.Add(tile);
