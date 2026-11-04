@@ -33,7 +33,8 @@ public final class VerificationKeyboardTest {
     private static WebView engine(SearchActivity activity) { return (WebView) field(activity, "engine"); }
     private static void loadFixture(ActivityScenario<SearchActivity> scenario) {
         scenario.onActivity(activity -> engine(activity).loadDataWithBaseURL(
-            "https://vider.info/search/all/local-input-test", FIXTURE, "text/html", "UTF-8", null));
+            "https://vider.info/search/all/local-input-test", FIXTURE, "text/html", "UTF-8",
+            "https://vider.info/search/all/local-input-test"));
         AtomicBoolean loaded = new AtomicBoolean();
         long deadline = SystemClock.elapsedRealtime() + 15000;
         while (!loaded.get() && SystemClock.elapsedRealtime() < deadline) {
