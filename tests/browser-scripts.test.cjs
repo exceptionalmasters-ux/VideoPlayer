@@ -169,3 +169,20 @@ test('verification focus preserves the field the user selected and ignores conse
   assert.equal(selected.focused,true); assert.equal(captcha.focused,undefined);
   assert.equal(vm.runInNewContext(asset('verification-focus.js'), {document:{activeElement:null,querySelectorAll:() => []}}),false);
 });
+
+test('manual verification copies only user-entered text and dispatches input/change without submitting', () => {
+  const events=[];
+  const input=editableInput({value:'',dispatchEvent(event){events.push(event.type);},submit(){throw Error('Must not submit');}});
+  const code='a"b\\c';
+  const script=asset('verification-fill.js').replace('__VP_MANUAL_CODE__',JSON.stringify(code));
+  assert.equal(vm.runInNewContext(script,{document:{querySelectorAll:()=>[input]},Event:class {constructor(type){this.type=type;}}}),true);
+  assert.equal(input.value,code);
+  assert.deepEqual(events,['input','change']);
+});
+test('manual verification does not write into hidden or unrelated inputs', () => {
+  const unrelated=editableInput({name:'email',id:'email',value:'unchanged'});
+  const hidden=editableInput({value:'unchanged',getBoundingClientRect:()=>({height:0})});
+  assert.equal(vm.runInNewContext(asset('verification-fill.js').replace('__VP_MANUAL_CODE__','"test"'),
+    {document:{querySelectorAll:()=>[unrelated,hidden]},Event:class{}}),false);
+  assert.equal(unrelated.value,'unchanged');assert.equal(hidden.value,'unchanged');
+});

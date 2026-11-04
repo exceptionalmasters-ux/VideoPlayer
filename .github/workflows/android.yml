@@ -101,6 +101,10 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
+            adb shell input keyevent 82
+            adb shell settings put system screen_off_timeout 1800000
             adb shell settings put secure show_ime_with_hard_keyboard 1
             gradle --no-daemon --console=plain connectedDebugAndroidTest
       - name: Upload keyboard test reports

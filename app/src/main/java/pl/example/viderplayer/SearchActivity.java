@@ -46,6 +46,7 @@ public final class SearchActivity extends Activity {
     private FrameLayout screen;
     private LinearLayout searchContent;
     private LinearLayout verificationPanel;
+    private EditText verificationCode;
     private String requestedSearch;
     private boolean searchReturnUsed;
     private long lastSearchAt;
@@ -260,7 +261,7 @@ public final class SearchActivity extends Activity {
         heading.setPadding(dp(16), dp(12), dp(16), dp(4));
         verificationPanel.addView(heading);
         TextView explanation = text("verification".equals(stage)
-            ? "Vider prosi o kod już przy wyszukiwaniu. Wpisz go poniżej i użyj przycisku na stronie."
+            ? "Vider sprawdza dostęp już przy wyszukiwaniu. Wpisz kod w polu aplikacji, wybierz „Wstaw kod”, potem przycisk na stronie."
             : "Dokończ wymagany przez Vider krok. Potem wrócimy do miniatur.", 13, Color.LTGRAY);
         explanation.setPadding(dp(16), 0, dp(16), dp(8));
         verificationPanel.addView(explanation);
@@ -268,8 +269,25 @@ public final class SearchActivity extends Activity {
         addButton(actions, "Klawiatura", this::showVerificationKeyboard);
         addButton(actions, "Sprawdź", () -> inspect(++scanToken, 0));
         addButton(actions, "Anuluj", this::cancelVerification);
-        verificationPanel.addView(actions);
         verificationPanel.addView(engine, new LinearLayout.LayoutParams(-1, 0, 1));
+        if ("verification".equals(stage)) {
+            LinearLayout codeRow = new LinearLayout(this);
+            codeRow.setPadding(dp(8), dp(4), dp(8), 0);
+            verificationCode = new EditText(this);
+            verificationCode.setHint("Kod z obrazka — wpisz tutaj");
+            verificationCode.setSingleLine(true);
+            verificationCode.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+            verificationCode.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
+            verificationCode.setImeOptions(EditorInfo.IME_ACTION_DONE);
+            verificationCode.setOnEditorActionListener((view, action, event) -> {
+                if (action == EditorInfo.IME_ACTION_DONE) { applyVerificationCode(); return true; }
+                return false;
+            });
+            codeRow.addView(verificationCode, new LinearLayout.LayoutParams(0, dp(56), 1));
+            addButton(codeRow, "Wstaw kod", this::applyVerificationCode);
+            verificationPanel.addView(codeRow);
+        }
+        verificationPanel.addView(actions);
         screen.addView(verificationPanel, new FrameLayout.LayoutParams(-1, -1));
         engine.setVisibility(View.VISIBLE);
         engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
@@ -286,6 +304,19 @@ public final class SearchActivity extends Activity {
     }
     private void showVerificationKeyboard() {
         if (!active || verificationPanel == null || !UrlPolicy.allowed(engine.getUrl())) return;
+        if (verificationCode != null) {
+            verificationCode.requestFocus();
+            verificationCode.post(() -> {
+                if (!active || verificationCode == null) return;
+                InputMethodManager input = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                boolean shown = input.showSoftInput(verificationCode, InputMethodManager.SHOW_IMPLICIT);
+                if (android.os.Build.VERSION.SDK_INT >= 30 && getWindow().getInsetsController() != null) {
+                    getWindow().getInsetsController().show(android.view.WindowInsets.Type.ime());
+                }
+                diagnostics.add("search.native_keyboard_requested", null, shown ? 1 : 0);
+            });
+            return;
+        }
         engine.requestFocus();
         engine.evaluateJavascript(asset("verification-focus.js"), result -> {
             if (!"true".equals(result) || !active || verificationPanel == null) return;
@@ -297,6 +328,26 @@ public final class SearchActivity extends Activity {
                 diagnostics.add("search.keyboard_requested", null, shown ? 1 : 0);
             }, 200);
         });
+    }
+    private void applyVerificationCode() {
+        if (verificationCode == null || !UrlPolicy.allowed(engine.getUrl())) return;
+        String code = verificationCode.getText().toString();
+        if (code.isEmpty()) { verificationCode.setError("Wpisz kod z obrazka"); return; }
+        String javascript = asset("verification-fill.js").replace("__VP_MANUAL_CODE__", JSONObject.quote(code));
+        engine.evaluateJavascript(javascript, result -> {
+            if (verificationPanel == null) return;
+            diagnostics.add("search.manual_code_inserted", null, "true".equals(result) ? 1 : 0);
+            if ("true".equals(result)) {
+                ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(verificationCode.getWindowToken(), 0);
+                Toast.makeText(this, "Kod wstawiony. Użyj przycisku „Wchodzę” na stronie.", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "Nie znaleziono pola kodu na stronie. Spróbuj dotknąć go bezpośrednio.", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if (focused && active && verificationCode != null) verificationCode.post(this::showVerificationKeyboard);
     }
     private void cancelVerification() {
         ++scanToken;
@@ -311,6 +362,8 @@ public final class SearchActivity extends Activity {
         if (owner != null) owner.removeView(engine);
         screen.removeView(verificationPanel);
         verificationPanel = null;
+        if (verificationCode != null) verificationCode.setText("");
+        verificationCode = null;
         engine.clearFocus();
         engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
         engine.setVisibility(View.INVISIBLE);

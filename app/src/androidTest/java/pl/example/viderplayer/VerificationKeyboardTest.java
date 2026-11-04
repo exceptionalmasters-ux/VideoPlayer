@@ -69,6 +69,9 @@ public final class VerificationKeyboardTest {
             WebView web = engine(activity);
             details.set("panel=" + (field(activity,"verificationPanel") != null)
                 + ", viewFocus=" + web.hasFocus() + ", windowFocus=" + web.hasWindowFocus()
+                + ", decorFocus=" + activity.getWindow().getDecorView().hasWindowFocus()
+                + ", attached=" + web.isAttachedToWindow()
+                + ", nativeCode=" + (field(activity,"verificationCode") != null)
                 + ", flags=" + activity.getWindow().getAttributes().flags
                 + ", url=" + web.getUrl());
             web.evaluateJavascript("JSON.stringify({active:document.activeElement&&document.activeElement.id,height:innerHeight,inputHeight:document.getElementById('code')&&document.getElementById('code').getBoundingClientRect().height})",
@@ -91,7 +94,17 @@ public final class VerificationKeyboardTest {
         try (ActivityScenario<SearchActivity> scenario = ActivityScenario.launch(SearchActivity.class)) {
             loadFixture(scenario);
             awaitKeyboard(scenario, true);
+            scenario.onActivity(activity -> {
+                android.widget.EditText code = (android.widget.EditText) field(activity, "verificationCode");
+                assertNotNull(code); assertTrue(code.hasFocus());
+            });
             InstrumentationRegistry.getInstrumentation().sendStringSync("keyboardtest");
+            scenario.onActivity(activity -> {
+                android.widget.EditText code = (android.widget.EditText) field(activity, "verificationCode");
+                assertEquals("keyboardtest", code.getText().toString());
+                Button insert = findButton(activity.getWindow().getDecorView(), "Wstaw kod");
+                assertNotNull(insert); insert.performClick();
+            });
             AtomicReference<String> value = new AtomicReference<>();
             scenario.onActivity(activity -> engine(activity).evaluateJavascript(
                 "document.getElementById('code').value", value::set));
@@ -111,7 +124,7 @@ public final class VerificationKeyboardTest {
             loadFixture(scenario);
             awaitKeyboard(scenario, true);
             scenario.onActivity(activity -> ((InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE))
-                .hideSoftInputFromWindow(engine(activity).getWindowToken(), 0));
+                .hideSoftInputFromWindow(((View)field(activity, "verificationCode")).getWindowToken(), 0));
             awaitKeyboard(scenario, false);
             scenario.onActivity(activity -> {
                 Button button = findButton(activity.getWindow().getDecorView(), "Klawiatura");
