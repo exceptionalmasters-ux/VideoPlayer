@@ -122,7 +122,7 @@ public final class SearchActivity extends Activity {
         root.addView(sourceRow);
         LinearLayout input = new LinearLayout(this);
         input.setPadding(dp(12), 0, dp(12), 0);
-        query = new EditText(this);
+        query = new TvEditText(this);
         query.setSingleLine(true);
         TvUi.editor(query,this::search);
         query.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});

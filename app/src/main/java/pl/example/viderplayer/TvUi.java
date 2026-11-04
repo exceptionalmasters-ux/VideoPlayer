@@ -47,6 +47,7 @@ final class TvUi {
     static void editor(EditText input) { editor(input,null); }
     static void editor(EditText input,Runnable submit) {
         if(!enabled(input.getContext()))return;
+        if(input instanceof TvEditText)((TvEditText)input).confirmation(submit);
         focusable(input);
         input.setTextColor(Color.WHITE);input.setHintTextColor(Color.rgb(187,205,211));
         input.setHighlightColor(Color.argb(120,114,220,196));input.setCursorVisible(true);input.setTextSize(18);
