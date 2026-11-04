@@ -148,3 +148,24 @@ test('search resolves relative Vider movie links into native cards', () => {
   assert.equal(result.length, 1);
   assert.equal(result[0].url, 'https://vider.info/vid/+fexample');
 });
+
+function editableInput(extra = {}) {
+  return {tagName:'INPUT',type:'text',name:'captcha_code',id:'code',
+    getBoundingClientRect:() => ({height:30}),getAttribute:() => '',
+    focus(){this.focused=true;},scrollIntoView(){this.scrolled=true;},...extra};
+}
+test('verification focus selects the visible code input without changing its value', () => {
+  const hidden = editableInput({getBoundingClientRect:() => ({height:0})});
+  const input = editableInput({value:'unchanged'});
+  const document = {activeElement:null,querySelectorAll:() => [hidden,input]};
+  assert.equal(vm.runInNewContext(asset('verification-focus.js'), {document}), true);
+  assert.equal(input.focused,true); assert.equal(input.scrolled,true);
+  assert.equal(input.value,'unchanged'); assert.equal(hidden.focused,undefined);
+});
+test('verification focus preserves the field the user selected and ignores consent-only pages', () => {
+  const selected = editableInput({type:'email',name:'email'});
+  const captcha = editableInput();
+  assert.equal(vm.runInNewContext(asset('verification-focus.js'), {document:{activeElement:selected,querySelectorAll:() => [captcha]}}),true);
+  assert.equal(selected.focused,true); assert.equal(captcha.focused,undefined);
+  assert.equal(vm.runInNewContext(asset('verification-focus.js'), {document:{activeElement:null,querySelectorAll:() => []}}),false);
+});

@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.4.0.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.4.1.
 
 ## Co działa w kodzie
 
@@ -56,7 +56,7 @@ W wersji 0.4 źródłem jest wyszukiwarka samego Vider. Publiczny plik https://v
 
 Parser łączy miniaturę i tekst z różnych linków prowadzących do tego samego filmu. Obsługuje krótkie adresy `/vid/+fID` i starsze adresy `/profil/tytul+fID`, normalizując je do strony filmu. Nie wyświetla katalogów jako filmów. Stare indeksowane linki HTTP do dokładnych domen Vider są zamieniane na HTTPS przed otwarciem; inne hosty i schematy są odrzucane.
 
-Jeśli wykryta zostanie CAPTCHA, zgoda cookies lub wymagane logowanie, pojawia się oznaczone okno „Potwierdź dostęp do Vider” wewnątrz aplikacji. Użytkownik sam wpisuje kod lub dokonuje wyboru. Po uzyskaniu dostępu aplikacja wraca do kafelków. Nie próbuje automatycznie rozwiązywać CAPTCHA. Przycisk „Gotowe” ponawia odczyt, a „Anuluj” lub Wstecz przerywa weryfikację. Przy błędzie, braku wyników lub nierozpoznanym układzie pozostaje natywny komunikat; strona wyszukiwania nie jest pokazywana jako awaryjny ekran.
+Jeśli wykryta zostanie CAPTCHA, zgoda cookies lub wymagane logowanie, pojawia się pełny ekran „Potwierdzenie wyszukiwania” wewnątrz aplikacji. Użytkownik sam wpisuje kod lub dokonuje wyboru. Po uzyskaniu dostępu aplikacja wraca do kafelków. Nie próbuje automatycznie rozwiązywać CAPTCHA. Przycisk „Sprawdź” ponawia odczyt, a „Anuluj” lub Wstecz przerywa weryfikację. Przy błędzie, braku wyników lub nierozpoznanym układzie pozostaje natywny komunikat; strona wyszukiwania nie jest pokazywana jako awaryjny ekran.
 
 Ograniczono równoległość pobierania miniatur do jednego zadania i dodano ich cache w pamięci, aby powtórne wyświetlenie listy nie pobierało ponownie tych samych obrazów. Kolejne wyszukiwania można rozpoczynać co najmniej co dwie sekundy. Nie gwarantuje to braku CAPTCHA: jej wyświetlanie zależy od serwisu i adresu sieciowego.
 
@@ -66,12 +66,18 @@ Miniatury są pobierane z linków listy lub metadanych tej samej strony/ramki fi
 
 ## Test na telefonie
 
-1. Zainstaluj 0.4.0 jako aktualizację 0.3.0 — podpis testowy powinien być ten sam, więc nie odinstalowuj poprzedniej aplikacji bez potrzeby. Przejście z 0.2.0 może wymagać odinstalowania z powodu dawnego jednorazowego podpisu.
+1. Zainstaluj 0.4.1 jako aktualizację 0.4.0 lub 0.3.0 — podpis testowy powinien być ten sam, więc nie odinstalowuj poprzedniej aplikacji bez potrzeby. Przejście z 0.2.0 może wymagać odinstalowania z powodu dawnego jednorazowego podpisu.
 2. Wpisz tytuł i dotknij Szukaj. Sprawdź kafelki i miniatury. Ekran nie powinien pokazywać Google ani strony wyszukiwarki Vider.
-3. Jeśli otworzy się „Potwierdź dostęp do Vider”, wpisz kod lub wybierz zgodę samodzielnie. Po zakończeniu powinny pojawić się miniatury.
+3. Jeśli otworzy się „Potwierdzenie wyszukiwania”, wpisz kod lub wybierz zgodę samodzielnie. CAPTCHA może wystąpić już po Szukaj, ponieważ samą wyszukiwarkę również chroni Vider. Po zakończeniu powinny pojawić się miniatury. W 0.4.1 pole kodu jest obsługiwane w głównym oknie Activity z adjustResize, a nie w AlertDialog. Jeśli klawiatura została ręcznie zamknięta, przycisk „Klawiatura” otworzy ją dla pola kodu. Anuluj wraca do wyszukiwania.
 4. Dotknij miniatury, uruchom film i sprawdź „Widok filmu”. „Wyniki” wraca do listy.
 5. Jeśli zamiast kafelków jest błąd lub pusta lista, wybierz **Raport** na ekranie wyszukiwania i prześlij JSON z krótkim opisem. Nie trzeba kopiować kodu strony ani odpowiedzi CAPTCHA.
 
 ## Stan weryfikacji
 
 Odtwarzanie i widok filmu w 0.2 zostały potwierdzone na telefonie przez użytkownika. W 0.3 testy i build przechodziły, ale awaryjne pokazanie strony Google nie spełniało oczekiwanego interfejsu. W 0.4 wyszukiwanie i wyniki są przebudowane zgodnie z powyższym opisem. Testy parsera, wykrywania weryfikacji, nawigacji i polityki adresów są wykonywane razem z Android Lint i kompilacją APK. Środowisko deweloperskie otrzymuje pustą odpowiedź HTTP 404 dla wyszukiwania Vider, dlatego działanie wyszukiwania na żywo wymaga testu na telefonie. Potwierdzono jedynie oficjalny szablon w opensearch.xml; nie traktujemy samej kompilacji jako dowodu działania serwisu.
+
+## Poprawka 0.4.1: klawiatura weryfikacji
+
+Zgłoszony ekran CAPTCHA w 0.4.0 nie uruchamiał klawiatury w polu HTML. Zastąpiono AlertDialog pełnym ekranem w tym samym oknie Activity, dodano jawny fokus WebView, fokus widocznego pola kodu, oczekiwanie na połączenie edytora i żądanie IME. Wartość pola nie jest odczytywana ani zmieniana przez kod aplikacji. Przycisk „Klawiatura” pozwala ponowić żądanie, a „Sprawdź” ponawia odczyt listy. Pola logowania i zgody nie są automatycznie wypełniane.
+
+Workflow wykonuje dodatkowo testy instrumentacyjne na emulatorze Androida 15: lokalny formularz weryfikacji, widoczność rzeczywistej klawiatury, odbieranie wpisanego tekstu testowego oraz ponowne otwarcie klawiatury przyciskiem. Testy nie łączą się z Vider i nie rozwiązują rzeczywistej CAPTCHA. Raport jest w keyboard-test-reports. Każdy APK przechodzi też oficjalną weryfikację podpisu apksigner przed udostępnieniem.

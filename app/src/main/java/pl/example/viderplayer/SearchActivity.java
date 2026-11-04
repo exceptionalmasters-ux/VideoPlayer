@@ -43,7 +43,9 @@ public final class SearchActivity extends Activity {
     private final DiagnosticLog diagnostics = new DiagnosticLog();
     private static final int EXPORT_REPORT = 43;
     private FrameLayout engineHost;
-    private AlertDialog verificationDialog;
+    private FrameLayout screen;
+    private LinearLayout searchContent;
+    private LinearLayout verificationPanel;
     private String requestedSearch;
     private boolean searchReturnUsed;
     private long lastSearchAt;
@@ -55,13 +57,16 @@ public final class SearchActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(17, 24, 32));
-        setContentView(root);
-        root.setOnApplyWindowInsetsListener((view, insets) -> {
+        searchContent = root;
+        screen = new FrameLayout(this);
+        screen.addView(root, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(screen);
+        screen.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        root.requestApplyInsets();
+        screen.requestApplyInsets();
         TextView brand = text("VideoPlayer", 26, Color.WHITE);
         brand.setTypeface(null, Typeface.BOLD);
         brand.setPadding(dp(16), dp(18), dp(16), dp(2));
@@ -190,7 +195,7 @@ public final class SearchActivity extends Activity {
                 diagnostics.add("search.verification_required", null,
                     "verification".equals(stage) ? 1 : ("consent".equals(stage) ? 2 : 3));
                 status.setText("Serwis wymaga potwierdzenia. Po nim wrócimy do miniatur.");
-                showVerification();
+                showVerification(stage);
                 if (attempt < 120) handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
                 return;
             }
@@ -243,37 +248,79 @@ public final class SearchActivity extends Activity {
             }
         });
     }
-    private void showVerification() {
-        if (verificationDialog != null || !active) return;
+    private void showVerification(String stage) {
+        if (verificationPanel != null || !active) return;
         android.view.ViewGroup parent = (android.view.ViewGroup) engine.getParent();
         if (parent != null) parent.removeView(engine);
-        FrameLayout panel = new FrameLayout(this);
-        panel.addView(engine, new FrameLayout.LayoutParams(-1, -1));
+        searchContent.setVisibility(View.GONE);
+        verificationPanel = new LinearLayout(this);
+        verificationPanel.setOrientation(LinearLayout.VERTICAL);
+        verificationPanel.setBackgroundColor(Color.rgb(17, 24, 32));
+        TextView heading = text("Potwierdzenie wyszukiwania", 20, Color.WHITE);
+        heading.setPadding(dp(16), dp(12), dp(16), dp(4));
+        verificationPanel.addView(heading);
+        TextView explanation = text("verification".equals(stage)
+            ? "Vider prosi o kod już przy wyszukiwaniu. Wpisz go poniżej i użyj przycisku na stronie."
+            : "Dokończ wymagany przez Vider krok. Potem wrócimy do miniatur.", 13, Color.LTGRAY);
+        explanation.setPadding(dp(16), 0, dp(16), dp(8));
+        verificationPanel.addView(explanation);
+        LinearLayout actions = new LinearLayout(this);
+        addButton(actions, "Klawiatura", this::showVerificationKeyboard);
+        addButton(actions, "Sprawdź", () -> inspect(++scanToken, 0));
+        addButton(actions, "Anuluj", this::cancelVerification);
+        verificationPanel.addView(actions);
+        verificationPanel.addView(engine, new LinearLayout.LayoutParams(-1, 0, 1));
+        screen.addView(verificationPanel, new FrameLayout.LayoutParams(-1, -1));
         engine.setVisibility(View.VISIBLE);
         engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
-        verificationDialog = new AlertDialog.Builder(this)
-            .setTitle("Potwierdź dostęp do Vider")
-            .setMessage("Jeśli serwis prosi o kod, zgodę lub logowanie, wykonaj ten krok tutaj. Potem wrócimy do miniatur.")
-            .setView(panel)
-            .setPositiveButton("Gotowe", (d, w) -> handler.postDelayed(() -> inspect(++scanToken, 0), 300))
-            .setNegativeButton("Anuluj", (d, w) -> { ++scanToken; status.setText("Weryfikacja przerwana. Możesz ponowić wyszukiwanie."); })
-            .create();
-        verificationDialog.setOnCancelListener(dialog -> { ++scanToken; status.setText("Weryfikacja przerwana. Możesz ponowić wyszukiwanie."); });
-        verificationDialog.setOnDismissListener(dialog -> {
-            android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
-            if (owner != null) owner.removeView(engine);
-            engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
-            engine.setVisibility(View.INVISIBLE);
-            engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-            verificationDialog = null;
-            CookieManager.getInstance().flush();
+        engine.setFocusable(true);
+        engine.setFocusableInTouchMode(true);
+        // Keep the editor in the Activity's window. AlertDialog can mark WebView-only
+        // content ALT_FOCUSABLE_IM before an HTML input becomes the active editor.
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            | android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        engine.requestFocus();
+        diagnostics.add("search.verification_open", null, 0);
+        if ("verification".equals(stage)) engine.postDelayed(this::showVerificationKeyboard, 250);
+    }
+    private void showVerificationKeyboard() {
+        if (!active || verificationPanel == null || !UrlPolicy.allowed(engine.getUrl())) return;
+        engine.requestFocus();
+        engine.evaluateJavascript(asset("verification-focus.js"), result -> {
+            if (!"true".equals(result) || !active || verificationPanel == null) return;
+            // Wait for Chromium's HTML input connection before asking Android for the IME.
+            engine.postDelayed(() -> {
+                if (!active || verificationPanel == null || !engine.hasWindowFocus()) return;
+                InputMethodManager input = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                boolean shown = input.showSoftInput(engine, InputMethodManager.SHOW_IMPLICIT);
+                diagnostics.add("search.keyboard_requested", null, shown ? 1 : 0);
+            }, 200);
         });
-        verificationDialog.show();
-        android.view.Window window = verificationDialog.getWindow();
-        if (window != null) window.setLayout(-1, Math.round(getResources().getDisplayMetrics().heightPixels * 0.85f));
+    }
+    private void cancelVerification() {
+        ++scanToken;
+        diagnostics.add("search.verification_cancelled", null, 0);
+        dismissVerification();
+        status.setText("Weryfikacja przerwana. Możesz ponowić wyszukiwanie.");
     }
     private void dismissVerification() {
-        if (verificationDialog != null) verificationDialog.dismiss();
+        if (verificationPanel == null) return;
+        ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(engine.getWindowToken(), 0);
+        android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
+        if (owner != null) owner.removeView(engine);
+        screen.removeView(verificationPanel);
+        verificationPanel = null;
+        engine.clearFocus();
+        engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
+        engine.setVisibility(View.INVISIBLE);
+        engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        searchContent.setVisibility(View.VISIBLE);
+        CookieManager.getInstance().flush();
+    }
+    @Override public void onBackPressed() {
+        if (verificationPanel != null) cancelVerification();
+        else super.onBackPressed();
     }
     private void render() {
         thumbnails.nextGeneration();
