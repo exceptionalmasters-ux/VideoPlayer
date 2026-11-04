@@ -99,7 +99,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          emulator-options: -no-window -gpu swiftshader_indirect -feature -Vulkan -memory 2048 -noaudio -no-boot-anim -no-snapshot
           script: |
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
