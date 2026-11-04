@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-android-0.7.1
+  group: publish-android-0.7.2
   cancel-in-progress: false
 jobs:
   publish:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-debug
-          run-id: 41912363622
+          run-id: 41922054573
           github-token: ${{ github.token }}
           path: verified
       - name: Publish the verified universal APK
@@ -30,11 +30,11 @@ jobs:
           set -euo pipefail
           mapfile -t apks < <(find verified -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" VideoPlayer-0.7.1.apk
-          echo 'c39a9baa6a85d10a8280bd1e59f8d504a87a6747e16326dda794ed07ac0a9b12  VideoPlayer-0.7.1.apk' | sha256sum -c -
-          if gh release view android-v0.7.1 >/dev/null 2>&1; then
-            gh release download android-v0.7.1 --pattern VideoPlayer-0.7.1.apk --output existing.apk
-            echo 'c39a9baa6a85d10a8280bd1e59f8d504a87a6747e16326dda794ed07ac0a9b12  existing.apk' | sha256sum -c -
+          cp "${apks[0]}" VideoPlayer-0.7.2.apk
+          echo '68f844531a28626a7b7fb191241a095edd2cff30318ebfccd9e1fb9f035ce94d  VideoPlayer-0.7.2.apk' | sha256sum -c -
+          if gh release view android-v0.7.2 >/dev/null 2>&1; then
+            gh release download android-v0.7.2 --pattern VideoPlayer-0.7.2.apk --output existing.apk
+            echo '68f844531a28626a7b7fb191241a095edd2cff30318ebfccd9e1fb9f035ce94d  existing.apk' | sha256sum -c -
           else
-            gh release create android-v0.7.1 VideoPlayer-0.7.1.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.7.1 — Android i Android TV' --notes 'Poprawiona nawigacja pilotem przez przyciski i kafelki. Enter oraz zatwierdzenie klawiatury TV uruchamia wyszukiwanie. Czytelne pola kodu z automatycznym fokusem. Uproszczony pasek filmu: OK to pauza, lewo/prawo przewija. Opcjonalny kursor pilota. Historia i ulubione zachowane. Testy telefonu i TV przeszły. SHA-256: c39a9baa6a85d10a8280bd1e59f8d504a87a6747e16326dda794ed07ac0a9b12' --prerelease
+            gh release create android-v0.7.2 VideoPlayer-0.7.2.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.7.2 — Android i Android TV' --notes 'Kursor 2x szybszy, obejmuje całe okno i ma widoczny przycisk wyłączenia. Wstecz najpierw wyłącza kursor. Kod wpisany ręcznie w stronie można zatwierdzić akcją Gotowe klawiatury TV. Poprawione wykrywanie embed, późnego i wymienianego odtwarzacza oraz wyśrodkowanie obrazka kodu. Testy telefonu, TV i wspólnych skryptów Windows przeszły. SHA-256: 68f844531a28626a7b7fb191241a095edd2cff30318ebfccd9e1fb9f035ce94d' --prerelease
           fi
