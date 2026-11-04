@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-android-0.7.2
+  group: publish-android-0.7.3
   cancel-in-progress: false
 jobs:
   publish:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-debug
-          run-id: 41922054573
+          run-id: 41926040835
           github-token: ${{ github.token }}
           path: verified
       - name: Publish the verified universal APK
@@ -30,11 +30,11 @@ jobs:
           set -euo pipefail
           mapfile -t apks < <(find verified -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" VideoPlayer-0.7.2.apk
-          echo '68f844531a28626a7b7fb191241a095edd2cff30318ebfccd9e1fb9f035ce94d  VideoPlayer-0.7.2.apk' | sha256sum -c -
-          if gh release view android-v0.7.2 >/dev/null 2>&1; then
-            gh release download android-v0.7.2 --pattern VideoPlayer-0.7.2.apk --output existing.apk
-            echo '68f844531a28626a7b7fb191241a095edd2cff30318ebfccd9e1fb9f035ce94d  existing.apk' | sha256sum -c -
+          cp "${apks[0]}" VideoPlayer-0.7.3.apk
+          echo 'a2693cd69968e467e1f06bd2d7c636d0cee827907130cb69b641fb5de200e17f  VideoPlayer-0.7.3.apk' | sha256sum -c -
+          if gh release view android-v0.7.3 >/dev/null 2>&1; then
+            gh release download android-v0.7.3 --pattern VideoPlayer-0.7.3.apk --output existing.apk
+            echo 'a2693cd69968e467e1f06bd2d7c636d0cee827907130cb69b641fb5de200e17f  existing.apk' | sha256sum -c -
           else
-            gh release create android-v0.7.2 VideoPlayer-0.7.2.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.7.2 — Android i Android TV' --notes 'Kursor 2x szybszy, obejmuje całe okno i ma widoczny przycisk wyłączenia. Wstecz najpierw wyłącza kursor. Kod wpisany ręcznie w stronie można zatwierdzić akcją Gotowe klawiatury TV. Poprawione wykrywanie embed, późnego i wymienianego odtwarzacza oraz wyśrodkowanie obrazka kodu. Testy telefonu, TV i wspólnych skryptów Windows przeszły. SHA-256: 68f844531a28626a7b7fb191241a095edd2cff30318ebfccd9e1fb9f035ce94d' --prerelease
+            gh release create android-v0.7.3 VideoPlayer-0.7.3.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.7.3 — Android i Android TV' --notes 'Zapisywanie pozycji filmu w lokalnej historii i ulubionych. Kafelki pokazują czas wznowienia, a przytrzymanie kafelka pozwala wybrać Od początku. Automatyczne wznowienie przez oryginalny odtwarzacz po uruchomieniu filmu, z oddzieleniem czasu reklam. Testy zapisu, wznowienia w iframe, telefonu i Android TV przeszły. SHA-256: a2693cd69968e467e1f06bd2d7c636d0cee827907130cb69b641fb5de200e17f' --prerelease
           fi
