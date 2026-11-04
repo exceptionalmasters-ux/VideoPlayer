@@ -37,6 +37,13 @@ public final class TvRemoteTest {
             byte[] buffer=new byte[1024];while(stream.read(buffer)!=-1){ }
         }
     }
+    private static void await(ActivityScenario<SearchActivity> scenario,java.util.function.Predicate<SearchActivity> condition,String message){
+        java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
+        long deadline=android.os.SystemClock.elapsedRealtime()+10000;
+        do{scenario.onActivity(activity->ready.set(activity.hasWindowFocus()&&condition.test(activity)));if(ready.get())return;android.os.SystemClock.sleep(100);}while(android.os.SystemClock.elapsedRealtime()<deadline);
+        scenario.onActivity(activity->{View focus=activity.getCurrentFocus();fail(message+"; windowFocus="+activity.hasWindowFocus()+"; focus="+(focus==null?"none":focus.getClass().getName()+" "+focus.getContentDescription()));});
+    }
+    private static void cardFocus(ActivityScenario<SearchActivity> scenario,int index){await(scenario,activity->((GridLayout)field(activity,"grid")).getChildAt(index).hasFocus(),"Expected focus on card "+index);}
     private static void key(int value){InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(value);InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
     @Test public void tvLauncherAndDpadReachCardsAndOpenSelection() throws Exception {
         Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
@@ -64,18 +71,27 @@ public final class TvRemoteTest {
                 }catch(Exception e){throw new AssertionError(e);}
             });
             instrumentation.waitForIdleSync();
-            scenario.onActivity(activity->{GridLayout grid=(GridLayout)field(activity,"grid");assertEquals(4,grid.getColumnCount());grid.getChildAt(0).requestFocus();});
+            await(scenario,activity->{GridLayout grid=(GridLayout)field(activity,"grid");return grid.isLaidOut()&&grid.getChildCount()==12&&grid.getChildAt(0).getWidth()>0;},"TV results must finish layout before remote input");
+            scenario.onActivity(activity->{GridLayout grid=(GridLayout)field(activity,"grid");assertEquals(4,grid.getColumnCount());assertTrue(grid.getChildAt(0).requestFocus());});
+            cardFocus(scenario,0);
+            shell(instrumentation,"mkdir -p /sdcard/Download");
+            shell(instrumentation,"screencap -p /sdcard/Download/videoplayer-tv.png");
+            cardFocus(scenario,0);
             key(KeyEvent.KEYCODE_DPAD_RIGHT);
-            scenario.onActivity(activity->assertTrue(((GridLayout)field(activity,"grid")).getChildAt(1).hasFocus()));
+            cardFocus(scenario,1);
             key(KeyEvent.KEYCODE_DPAD_DOWN);
-            scenario.onActivity(activity->assertTrue(((GridLayout)field(activity,"grid")).getChildAt(5).hasFocus()));
-            key(KeyEvent.KEYCODE_DPAD_UP);key(KeyEvent.KEYCODE_DPAD_LEFT);key(KeyEvent.KEYCODE_DPAD_UP);
+            cardFocus(scenario,5);
+            key(KeyEvent.KEYCODE_DPAD_UP);cardFocus(scenario,1);
+            key(KeyEvent.KEYCODE_DPAD_LEFT);cardFocus(scenario,0);
+            key(KeyEvent.KEYCODE_DPAD_UP);
+            await(scenario,activity->((View)field(activity,"query")).hasFocus(),"UP must return to the title field");
             scenario.onActivity(activity->{
                 android.widget.EditText query=(android.widget.EditText)field(activity,"query");
                 assertTrue("UP from the first row must focus the search field",query.hasFocus());
                 assertFalse("Focusing the title must not open the TV keyboard without OK",query.getShowSoftInputOnFocus());
             });
-            key(KeyEvent.KEYCODE_DPAD_DOWN);key(KeyEvent.KEYCODE_DPAD_RIGHT);
+            key(KeyEvent.KEYCODE_DPAD_DOWN);cardFocus(scenario,0);
+            key(KeyEvent.KEYCODE_DPAD_RIGHT);cardFocus(scenario,1);
             // Gradle removes the test application's private files after instrumentation.
             // A shell-owned public fixture screenshot survives that cleanup for CI review.
             shell(instrumentation,"mkdir -p /sdcard/Download");
