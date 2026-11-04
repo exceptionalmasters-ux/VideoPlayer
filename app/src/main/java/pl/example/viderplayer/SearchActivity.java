@@ -59,6 +59,10 @@ public final class SearchActivity extends Activity {
     private int requestGeneration;
     private Runnable searchTimeout;
     private static final long SEARCH_TIMEOUT_MS = 30000;
+    private String defaultUserAgent;
+    private boolean mobileRedirectRetried;
+    private boolean freediscRouted;
+    private int freediscRouteAttempts;
     private SiteSource selectedSource = SiteSource.VIDER;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -128,6 +132,8 @@ public final class SearchActivity extends Activity {
         engine.setVisibility(View.INVISIBLE);
         engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         WebSettings settings = engine.getSettings();
+        defaultUserAgent = settings.getUserAgentString();
+        configureSource();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
@@ -152,6 +158,22 @@ public final class SearchActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return !"https".equals(request.getUrl().getScheme());
                 String target = request.getUrl().toString();
+                if (selectedSource == SiteSource.FREEDISC && SiteSource.isMobileFreediscUrl(target)) {
+                    diagnostics.add("search.mobile_redirect", null, 0);
+                    if (searchRunning && !mobileRedirectRetried) {
+                        mobileRedirectRetried = true;
+                        freediscRouted = false;
+                        freediscRouteAttempts = 0;
+                        final int generation = requestGeneration;
+                        handler.post(() -> {
+                            if (searchRunning && generation == requestGeneration) {
+                                configureSource();
+                                engine.loadUrl(selectedSource.home + "/");
+                            }
+                        });
+                    } else if (searchRunning) failSearch("Freedisc ponownie przekierowuje do wersji mobilnej. Zapisz Raport.");
+                    return true;
+                }
                 // A background navigation can never open a movie or launch another app.
                 boolean blocked = SiteSource.fromUrl(target) != selectedSource;
                 if (blocked) {
@@ -217,6 +239,7 @@ public final class SearchActivity extends Activity {
         dismissVerification();
         previewButton.setVisibility(View.GONE);
         selectedSource = source;
+        configureSource();
         requestedSearch = null;
         searchReturnUsed = false;
         lastSearchAt = 0;
@@ -226,6 +249,12 @@ public final class SearchActivity extends Activity {
         query.setHint("Tytuł filmu, np. " + source.example);
         getSharedPreferences("sources", MODE_PRIVATE).edit().putString("selected", source.name()).apply();
         status.setText("Źródło: " + source.label + ". Wpisz tytuł i wybierz Szukaj.");
+    }
+    private void configureSource() {
+        WebSettings settings = engine.getSettings();
+        settings.setUserAgentString(selectedSource.userAgent(defaultUserAgent));
+        settings.setUseWideViewPort(selectedSource == SiteSource.FREEDISC);
+        settings.setLoadWithOverviewMode(selectedSource == SiteSource.FREEDISC);
     }
     private void search() {
         String title = query.getText().toString().trim();
@@ -250,6 +279,10 @@ public final class SearchActivity extends Activity {
         previewButton.setVisibility(View.GONE);
         searchRunning = true;
         navigationStarted = false;
+        mobileRedirectRetried = false;
+        freediscRouted = false;
+        freediscRouteAttempts = 0;
+        configureSource();
         // Advertised by the site's public /opensearch.xml, not a guessed endpoint.
         requestedSearch = selectedSource.searchUrl(title);
         searchReturnUsed = false;
@@ -257,7 +290,32 @@ public final class SearchActivity extends Activity {
         diagnostics.add("search.start", requestedSearch, 0);
         diagnostics.add("search.source." + selectedSource.name().toLowerCase(java.util.Locale.ROOT), null, 0);
         armSearchTimeout();
-        engine.loadUrl(requestedSearch);
+        // Freedisc's own search button routes from its initialized desktop page.
+        engine.loadUrl(selectedSource == SiteSource.FREEDISC ? selectedSource.home + "/" : requestedSearch);
+    }
+    private void routeFreedisc(int token, int attempt) {
+        if (freediscRouted) {
+            failSearch("Freedisc wrócił na stronę główną po uruchomieniu wyszukiwania. Wybierz Pokaż stronę lub zapisz Raport.");
+            return;
+        }
+        if (++freediscRouteAttempts > 20) {
+            diagnostics.add("search.router_unavailable", engine.getUrl(), 0);
+            failSearch("Nie uruchomił się moduł wyszukiwarki Freedisc. Wybierz Pokaż stronę lub zapisz Raport.");
+            return;
+        }
+        String script = asset("freedisc-search.js").replace("__VP_SEARCH_URL__", JSONObject.quote(requestedSearch));
+        engine.evaluateJavascript(script, result -> {
+            if (!active || token != scanToken || !searchRunning) return;
+            if ("\"routed\"".equals(result)) {
+                freediscRouted = true;
+                diagnostics.add("search.client_route", requestedSearch, 0);
+            } else if ("\"invalid\"".equals(result) || "\"error\"".equals(result)) {
+                diagnostics.add("search.client_route_error", null, 0);
+                failSearch("Nie udało się uruchomić wyszukiwania Freedisc. Zapisz Raport.");
+                return;
+            }
+            handler.postDelayed(() -> inspect(token, attempt), 1000);
+        });
     }
     private void stopSearch() {
         searchRunning = false;
@@ -299,11 +357,17 @@ public final class SearchActivity extends Activity {
         searchRunning = true;
         ++requestGeneration;
         pauseSearchTimeout();
+        if (selectedSource == SiteSource.FREEDISC && UrlPolicy.isHome(engine.getUrl())) {
+            freediscRouted = false;
+            freediscRouteAttempts = 0;
+        }
         showVerification("preview");
         armSearchTimeout();
         if (SiteSource.fromUrl(engine.getUrl()) != selectedSource) {
             navigationStarted = false;
-            engine.loadUrl(requestedSearch);
+            if (selectedSource == SiteSource.FREEDISC) { freediscRouted = false; freediscRouteAttempts = 0; }
+            configureSource();
+            engine.loadUrl(selectedSource == SiteSource.FREEDISC ? selectedSource.home + "/" : requestedSearch);
         } else retryInspection();
     }
     private void inspect(int token, int attempt) {
@@ -328,6 +392,7 @@ public final class SearchActivity extends Activity {
             }
             armSearchTimeout();
             if (UrlPolicy.isHome(engine.getUrl()) && requestedSearch != null) {
+                if (selectedSource == SiteSource.FREEDISC) { routeFreedisc(token, attempt); return; }
                 if (!searchReturnUsed) {
                     searchReturnUsed = true;
                     CookieManager.getInstance().flush();

@@ -59,6 +59,8 @@ public final class MainActivity extends Activity {
     private boolean alive = true;
     private boolean resumed = true;
     private int pageGeneration;
+    private String defaultUserAgent;
+    private boolean mobileRedirectRetried;
 
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -105,7 +107,7 @@ public final class MainActivity extends Activity {
         content.addView(scroll);
         LinearLayout tools = new LinearLayout(this);
         button(tools, "Widok filmu", this::focusPlayer);
-        button(tools, "Wróć do filmu", () -> { if (movieNavigation.target() != null) web.loadUrl(movieNavigation.target()); });
+        button(tools, "Wróć do filmu", () -> { if (movieNavigation.target() != null) loadPage(movieNavigation.target()); });
         button(tools, "Diagnostyka", this::showDiagnostics);
         android.widget.HorizontalScrollView toolsScroll = new android.widget.HorizontalScrollView(this);
         toolsScroll.addView(tools);
@@ -121,6 +123,7 @@ public final class MainActivity extends Activity {
         web = new WebView(this);
         content.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         WebSettings settings = web.getSettings();
+        defaultUserAgent = settings.getUserAgentString();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
@@ -152,7 +155,22 @@ public final class MainActivity extends Activity {
                     // Keep HTTPS embedded players in the page; reject custom schemes.
                     return !"https".equalsIgnoreCase(request.getUrl().getScheme());
                 }
-                if (allowed(url)) return false;
+                if (SiteSource.isMobileFreediscUrl(url) && SiteSource.fromUrl(movieNavigation.target()) == SiteSource.FREEDISC) {
+                    diagnostics.add("navigation.mobile_freedisc", null, 0);
+                    if (!mobileRedirectRetried) {
+                        mobileRedirectRetried = true;
+                        final String target = movieNavigation.target();
+                        web.post(() -> loadPage(target));
+                    } else status.setText("Freedisc ponownie przekierowuje do wersji mobilnej. Zapisz raport.");
+                    return true;
+                }
+                if (allowed(url)) {
+                    SiteSource source = SiteSource.fromUrl(url);
+                    if (!source.userAgent(defaultUserAgent).equals(web.getSettings().getUserAgentString())) {
+                        loadPage(url); return true;
+                    }
+                    return false;
+                }
                 if (request.hasGesture() && "https".equalsIgnoreCase(request.getUrl().getScheme())) {
                     new AlertDialog.Builder(MainActivity.this)
                         .setTitle("Link poza obsługiwanymi serwisami")
@@ -240,11 +258,19 @@ public final class MainActivity extends Activity {
         });
         if (state != null) movieNavigation.restore(state.getString("selectedMovie"), state.getBoolean("retryUsed"));
         String shared = sharedUrl(getIntent());
+        if (state != null && SiteSource.fromUrl(movieNavigation.target()) != null)
+            web.getSettings().setUserAgentString(SiteSource.fromUrl(movieNavigation.target()).userAgent(defaultUserAgent));
         if (state != null && web.restoreState(state) != null) { /* Restore the current session page. */ }
-        else if (shared != null) { movieNavigation.select(shared); web.loadUrl(shared); }
-        else web.loadUrl(HOME);
+        else if (shared != null) { movieNavigation.select(shared); loadPage(shared); }
+        else loadPage(HOME);
     }
 
+    private void loadPage(String url) {
+        SiteSource source = SiteSource.fromUrl(url);
+        if (source == null) return;
+        web.getSettings().setUserAgentString(source.userAgent(defaultUserAgent));
+        web.loadUrl(url);
+    }
     private boolean allowed(String value) { return UrlPolicy.allowed(value); }
 
     private String script(String name) {
@@ -302,7 +328,7 @@ public final class MainActivity extends Activity {
                     if (alive && resumed && generation == pageGeneration && UrlPolicy.isHome(web.getUrl())) {
                         diagnostics.add("movie.return_after_home", target, 0);
                         CookieManager.getInstance().flush();
-                        web.loadUrl(target);
+                        loadPage(target);
                     }
                 }, 1200);
             } else if (consentVisible && !movieNavigation.retryUsed()) {
@@ -343,7 +369,8 @@ public final class MainActivity extends Activity {
             .hideSoftInputFromWindow(address.getWindowToken(), 0);
         web.requestFocus();
         movieNavigation.select(value);
-        web.loadUrl(value);
+        mobileRedirectRetried = false;
+        loadPage(value);
     }
     private String sharedUrl(Intent intent) {
         if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null

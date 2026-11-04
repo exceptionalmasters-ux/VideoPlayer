@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.1.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.2.
 
 ## Co działa w kodzie
 
@@ -111,3 +111,14 @@ Po błędzie lub nierozpoznanym zakończeniu ładowania pojawia się **Pokaż st
 Raport ma schemaVersion 2 i exportElapsedMs, aby określić czas między zdarzeniami a eksportem. Rozróżnia missing, supported, blank, webview_error, external_https i other bez zapisywania prywatnej treści adresów. Rejestruje początek nawigacji, klasę adresu callbacku i bieżącego dokumentu, zablokowane przekierowania, błędy zasobów, żądanie pobierania i wyczerpanie limitu. Treści wyszukiwania, kodu weryfikacji i cookies nadal nie trafiają do raportu.
 
 Nowy test Androida odtwarza brak callbacku kończącego ładowanie przy lokalnie przechwyconych odpowiedziach: uruchamia wyszukiwanie Freedisc, wywołuje faktycznie zaplanowany callback limitu, sprawdza zakończenie oczekiwania, pokazanie strony, przejście do ręcznej weryfikacji i ignorowanie starego timeoutu po zmianie źródła. Nie wymaga połączenia z serwisem ani czekania 30 sekund w CI. Poprawka usuwa nieskończony stan interfejsu i dostarcza diagnostykę; nie potwierdza działania wyszukiwarki Freedisc na żywo.
+
+
+## 0.5.2: desktopowy Freedisc i jego router wyszukiwania
+
+Raport 0.5.1 wykazał zablokowaną nawigację o nierozpoznanym schemacie przed wyświetleniem strony. Sprawdzenie HTTP strony głównej z identyfikatorem mobilnego WebView potwierdziło odpowiedź 302 do `http://m.freedisc.pl/`. Dla identyfikatora desktopowego ta sama strona zwróciła 200 z HTML. To odpowiada zaobserwowanemu pustemu ekranowi; pełny przebieg na telefonie po poprawce wymaga ponownego sprawdzenia.
+
+Tylko Freedisc korzysta teraz z desktopowego User-Agent, zachowującego wersję Chrome z lokalnego WebView. Vider zachowuje swój dotychczasowy identyfikator. Wyszukiwanie Freedisc rozpoczyna się na stronie głównej HTTPS; po inicjalizacji aplikacja wywołuje istniejący `Router.navigate(path, true)` serwisu, dokładnie tak jak jego własny przycisk wyszukiwania. Nie wywołuje nieudokumentowanego backendu ani nie wstawia własnych wyników. Zapobiega otwieraniu mobilnego wariantu oraz bezpośredniemu ładowaniu trasy wyszukiwania, która w środowisku deweloperskim zwraca pusty 404. Dane użytkownika są kodowane jako segment ścieżki i przekazywane do skryptu przez JSONObject.quote.
+
+Pierwsze przekierowanie do dokładnego `m.freedisc.pl` jest anulowane i może jednorazowo wznowić stronę desktopową HTTPS. Kolejne kończy się komunikatem; nie ma pętli ani pozwolenia na otwieranie HTTP. Klasy raportu rozróżniają teraz również `freedisc_mobile` i `insecure_http`. Odtwarzacz filmu również wybiera desktopowy identyfikator dla Freedisc. Cookies i normalne wymagania weryfikacji serwisu pozostają obsługiwane tak jak wcześniej.
+
+Testy sprawdzają rozdzielenie User-Agent obu źródeł, dokładne rozpoznawanie hosta mobilnego, walidację celu i gotowość routera oraz pełną ścieżkę na emulatorze: lokalnie przechwycona strona główna -> router -> natywne kafelki. Test nie wysyła zapytań do rzeczywistego Freedisc. Nadal obowiązuje limit czasu i opcjonalny przycisk Pokaż stronę. Działanie wyników i odtwarzania na żywo należy potwierdzić na telefonie.

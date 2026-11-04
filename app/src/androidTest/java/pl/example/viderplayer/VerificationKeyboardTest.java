@@ -220,4 +220,53 @@ public final class VerificationKeyboardTest {
             });
         }
     }
+
+    @Test public void desktopFreediscBootsAtHomeAndRoutesToNativeCards() throws Exception {
+        final String html = "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body><div id='search_files_result'></div><script>window.App={Instance:{Search:{}}};window.Router={navigate:function(path,trigger){history.pushState({},'',path);document.getElementById('search_files_result').innerHTML='<a href=\"/tester,f-19724546,ronin-1998-mp4\" title=\"Ronin.mp4\">Ronin.mp4</a>';}};</script></body></html>";
+        try (ActivityScenario<SearchActivity> scenario = ActivityScenario.launch(SearchActivity.class)) {
+            scenario.onActivity(activity -> {
+                selectSource(activity, SiteSource.FREEDISC);
+                try {
+                    Object loader = field(activity,"thumbnails");
+                    Field stopped = loader.getClass().getDeclaredField("stopped");
+                    stopped.setAccessible(true); stopped.setBoolean(loader,true);
+                } catch (Exception e) { throw new AssertionError(e); }
+                WebView web = engine(activity);
+                android.webkit.WebViewClient original = web.getWebViewClient();
+                web.setWebViewClient(new android.webkit.WebViewClient() {
+                    @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, android.webkit.WebResourceRequest request) {
+                        assertEquals("freedisc.pl",request.getUrl().getHost());
+                        return new android.webkit.WebResourceResponse("text/html","UTF-8",
+                            new java.io.ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    }
+                    @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) {
+                        original.onPageStarted(view,url,icon);
+                    }
+                    @Override public void onPageFinished(WebView view,String url) { original.onPageFinished(view,url); }
+                });
+                ((android.widget.EditText)field(activity,"query")).setText("Ronin");
+                try {
+                    java.lang.reflect.Method method=SearchActivity.class.getDeclaredMethod("search");
+                    method.setAccessible(true);method.invoke(activity);
+                } catch (Exception e) { throw new AssertionError(e); }
+            });
+            AtomicBoolean found = new AtomicBoolean();
+            long deadline=SystemClock.elapsedRealtime()+15000;
+            while (!found.get() && SystemClock.elapsedRealtime()<deadline) {
+                scenario.onActivity(activity -> found.set(((org.json.JSONArray)field(activity,"results")).length()==1));
+                SystemClock.sleep(100);
+            }
+            assertTrue("Client-side route did not produce native cards",found.get());
+            scenario.onActivity(activity -> {
+                assertEquals("https://freedisc.pl/search/all/Ronin",engine(activity).getUrl());
+                assertFalse(engine(activity).getSettings().getUserAgentString().contains("Mobile"));
+                assertEquals(false,field(activity,"searchRunning"));
+                assertEquals(1,((android.widget.GridLayout)field(activity,"grid")).getChildCount());
+                assertNull(field(activity,"verificationPanel"));
+                assertTrue(((DiagnosticLog)field(activity,"diagnostics")).export().contains("search.client_route"));
+                selectSource(activity,SiteSource.VIDER);
+                assertEquals(field(activity,"defaultUserAgent"),engine(activity).getSettings().getUserAgentString());
+            });
+        }
+    }
 }

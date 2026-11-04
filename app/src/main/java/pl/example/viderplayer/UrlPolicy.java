@@ -62,10 +62,12 @@ public final class UrlPolicy {
     public static String pageKind(String value) {
         if (value == null || value.isEmpty()) return "missing";
         if (allowed(value)) return "supported";
+        if (SiteSource.isMobileFreediscUrl(value)) return "freedisc_mobile";
         if (value.equals("about:blank") || value.startsWith("about:blank#")) return "blank";
         if (value.startsWith("chrome-error://") || value.startsWith("chrome://network-error/")) return "webview_error";
         try {
             URI uri = URI.create(value);
+            if ("http".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null) return "insecure_http";
             return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null ? "external_https" : "other";
         } catch (RuntimeException e) { return "other"; }
     }

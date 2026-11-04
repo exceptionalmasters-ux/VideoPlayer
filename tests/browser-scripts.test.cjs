@@ -244,3 +244,32 @@ test('focus selects an existing Freedisc embed frame and preserves it on restore
   assert.equal(body.children[0],frame);
   assert.equal(comments.hasAttribute('data-vp-hidden'),false);
 });
+
+
+function routeFreedisc(target, extra = {}) {
+  const calls=[];
+  const window={App:{Instance:{Search:{}}},Router:{navigate:(path,trigger)=>calls.push({path,trigger})},...extra};
+  const script=asset('freedisc-search.js').replace('__VP_SEARCH_URL__',JSON.stringify(target));
+  const result=vm.runInNewContext(script,{window,URL,location:{href:'https://freedisc.pl/'}});
+  return {result,calls};
+}
+test('Freedisc search uses the site router after it initializes, with encoded title and trigger flag',()=>{
+  const value=routeFreedisc('https://freedisc.pl/search/all/Ronin%201998%2FPL');
+  assert.equal(value.result,'routed');
+  assert.equal(value.calls.length,1);
+  assert.equal(value.calls[0].path,'/search/all/Ronin%201998%2FPL');
+  assert.equal(value.calls[0].trigger,true);
+  assert.equal(routeFreedisc('https://www.freedisc.pl/search/all/Ronin').result,'routed');
+  assert.equal(routeFreedisc('https://freedisc.pl/search/all/Ronin',{Router:null}).result,'waiting');
+  assert.equal(routeFreedisc('https://freedisc.pl/search/all/Ronin',{App:{}}).result,'waiting');
+});
+test('Freedisc router never routes unsafe destinations or arbitrary paths',()=>{
+  for(const target of ['http://freedisc.pl/search/all/Ronin','https://evil.test/search/all/Ronin',
+    'https://freedisc.pl:444/search/all/Ronin','https://user:pass@freedisc.pl/search/all/Ronin',
+    'https://freedisc.pl/profile','https://freedisc.pl/search/all/Ronin?token=secret',
+    'https://freedisc.pl/search/all/Ronin#private']) {
+    const value=routeFreedisc(target);
+    assert.equal(value.result,'invalid',target);
+    assert.equal(value.calls.length,0);
+  }
+});

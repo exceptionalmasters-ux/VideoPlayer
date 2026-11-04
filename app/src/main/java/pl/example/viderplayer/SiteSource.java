@@ -17,6 +17,23 @@ public enum SiteSource {
         try { return home + "/search/all/" + URLEncoder.encode(title, "UTF-8").replace("+", "%20"); }
         catch (java.io.UnsupportedEncodingException impossible) { throw new AssertionError(impossible); }
     }
+    public String userAgent(String original) {
+        if (this != FREEDISC) return original;
+        java.util.regex.Matcher chrome = java.util.regex.Pattern.compile("Chrome/([0-9.]+)").matcher(original == null ? "" : original);
+        String version = chrome.find() ? chrome.group(1) : "120.0.0.0";
+        return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/"
+            + version + " Safari/537.36";
+    }
+    public static boolean isMobileFreediscUrl(String value) {
+        try {
+            URI uri = URI.create(value);
+            boolean http = "http".equalsIgnoreCase(uri.getScheme());
+            boolean https = "https".equalsIgnoreCase(uri.getScheme());
+            return "m.freedisc.pl".equalsIgnoreCase(uri.getHost()) && uri.getRawUserInfo() == null
+                && (http && (uri.getPort() == -1 || uri.getPort() == 80)
+                    || https && (uri.getPort() == -1 || uri.getPort() == 443));
+        } catch (RuntimeException e) { return false; }
+    }
     public static SiteSource restore(String name) {
         try { return valueOf(name); } catch (RuntimeException e) { return VIDER; }
     }
