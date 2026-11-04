@@ -70,6 +70,9 @@ public final class SearchActivity extends Activity {
     private boolean television;
     private int selectedResultIndex;
     private Button searchButton;
+    private TvPointer pointer;
+    private final java.util.List<java.util.List<View>> tvRows=new java.util.ArrayList<>();
+    private java.util.List<View> tvLastRow=new java.util.ArrayList<>();
     private SiteSource selectedSource = SiteSource.VIDER;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -108,7 +111,11 @@ public final class SearchActivity extends Activity {
         sourceRow.addView(text("Źródło: ", 14, Color.LTGRAY));
         sourcePicker = new Spinner(this);
         sourcePicker.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
-            new String[]{SiteSource.VIDER.label, SiteSource.FREEDISC.label}));
+            new String[]{SiteSource.VIDER.label, SiteSource.FREEDISC.label}){
+            @Override public View getView(int position,View recycled,android.view.ViewGroup parent){
+                View v=super.getView(position,recycled,parent);if(television&&v instanceof TextView){((TextView)v).setTextColor(Color.WHITE);((TextView)v).setTextSize(18);}return v;
+            }
+        });
         sourcePicker.setSelection(selectedSource.ordinal());
         TvUi.focusable(sourcePicker);
         sourceRow.addView(sourcePicker, new LinearLayout.LayoutParams(0, dp(television?40:48), 1));
@@ -117,10 +124,10 @@ public final class SearchActivity extends Activity {
         input.setPadding(dp(12), 0, dp(12), 0);
         query = new EditText(this);
         query.setSingleLine(true);
-        TvUi.editor(query);
+        TvUi.editor(query,this::search);
         query.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});
         query.setHint("Tytuł filmu, np. " + selectedSource.example);
-        query.setTextSize(16);
+        query.setTextSize(television?20:16);
         query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.addView(query, new LinearLayout.LayoutParams(0, dp(52), 1));
         addButton(input, "Szukaj", this::search);
@@ -154,6 +161,7 @@ public final class SearchActivity extends Activity {
         engineHost = new FrameLayout(this);
         workspace.addView(engineHost, new FrameLayout.LayoutParams(-1, -1));
         engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
+        if(television)pointer=new TvPointer(screen,engine,()->{if(verificationCode!=null)verificationCode.requestFocus();else query.requestFocus();});
         engine.setVisibility(View.INVISIBLE);
         engine.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         WebSettings settings = engine.getSettings();
@@ -244,7 +252,7 @@ public final class SearchActivity extends Activity {
             }
         });
         query.setOnEditorActionListener((view, action, event) -> {
-            if (action == EditorInfo.IME_ACTION_SEARCH) { search(); return true; }
+            if (action == EditorInfo.IME_ACTION_SEARCH || television&&(action==EditorInfo.IME_ACTION_DONE||action==EditorInfo.IME_ACTION_GO||event!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_ENTER&&event.getAction()==android.view.KeyEvent.ACTION_UP)) { search(); return true; }
             return false;
         });
         sourcePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -253,7 +261,12 @@ public final class SearchActivity extends Activity {
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
-        if(television)query.post(query::requestFocus);
+        if(television){
+            tvRows.add(java.util.Arrays.asList(sourcePicker));tvRows.add(java.util.Arrays.asList(query,searchButton));
+            tvRows.add(children(actions));tvRows.add(children(collections));tvRows.add(java.util.Arrays.asList(previewButton));
+            searchContent.getViewTreeObserver().addOnGlobalLayoutListener(this::wireSearchNavigation);
+            query.post(query::requestFocus);
+        }
         if (saved != null) {
             query.setText(saved.getString("query", ""));
             try { results = new JSONArray(saved.getString("results", "[]")); } catch (Exception ignored) { }
@@ -270,6 +283,26 @@ public final class SearchActivity extends Activity {
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
         showCollection(intent.getStringExtra("collection"));
+    }
+    private static java.util.List<View> children(android.view.ViewGroup row){java.util.List<View> views=new java.util.ArrayList<>();for(int i=0;i<row.getChildCount();i++)views.add(row.getChildAt(i));return views;}
+    private void wireSearchNavigation(){
+        if(!television||verificationPanel!=null)return;
+        java.util.List<java.util.List<View>> live=TvFocus.connect(tvRows);
+        tvLastRow=live.isEmpty()?new java.util.ArrayList<>():live.get(live.size()-1);
+        if(grid.getChildCount()>0){
+            for(int i=0;i<tvLastRow.size();i++)tvLastRow.get(i).setNextFocusDownId(grid.getChildAt(Math.min(grid.getChildCount()-1,Math.round(i*3f/Math.max(1,tvLastRow.size()-1)))).getId());
+            query.setNextFocusDownId(grid.getChildAt(0).getId());searchButton.setNextFocusDownId(grid.getChildAt(0).getId());
+            for(int i=0;i<Math.min(4,grid.getChildCount());i++)if(!tvLastRow.isEmpty())grid.getChildAt(i).setNextFocusUpId(TvFocus.column(tvLastRow,i,4).getId());
+        }
+    }
+    private void focusAboveGrid(int column){wireSearchNavigation();if(!tvLastRow.isEmpty())TvFocus.column(tvLastRow,column,4).requestFocus();}
+    private void togglePointer(){
+        if(pointer!=null){boolean on=pointer.toggle();Toast.makeText(this,on?"Kursor: strzałki przesuwają · OK klika · Wstecz wyłącza":"Kursor wyłączony",Toast.LENGTH_SHORT).show();}
+    }
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event){
+        if(pointer!=null&&pointer.key(event))return true;
+        if(television&&verificationPanel!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_MENU){if(event.getAction()==android.view.KeyEvent.ACTION_UP)togglePointer();return true;}
+        return super.dispatchKeyEvent(event);
     }
     private void showCollection(String selected){
         if("results".equals(collection))searchResults=results;
@@ -542,7 +575,7 @@ public final class SearchActivity extends Activity {
         addButton(actions, "Klawiatura", this::showVerificationKeyboard);
         addButton(actions, "Sprawdź", this::retryInspection);
         addButton(actions, "Anuluj", this::cancelVerification);
-        if(television)addButton(actions,"Strona",()->{engine.requestFocus();});
+        if(television){addButton(actions,"Strona",()->{engine.requestFocus();});addButton(actions,"Kursor",this::togglePointer);}
         verificationPanel.addView(engine, new LinearLayout.LayoutParams(-1, 0, 1));
         if ("verification".equals(stage)) {
             LinearLayout codeRow = new LinearLayout(this);
@@ -550,19 +583,20 @@ public final class SearchActivity extends Activity {
             verificationCode = new EditText(this);
             verificationCode.setHint("Kod z obrazka — wpisz tutaj");
             verificationCode.setSingleLine(true);
-            TvUi.editor(verificationCode);
+            TvUi.editor(verificationCode,()->applyVerificationCode(true));
             verificationCode.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
             verificationCode.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
             verificationCode.setImeOptions(EditorInfo.IME_ACTION_DONE);
             verificationCode.setOnEditorActionListener((view, action, event) -> {
-                if (action == EditorInfo.IME_ACTION_DONE) { applyVerificationCode(); return true; }
+                if (action == EditorInfo.IME_ACTION_DONE || television&&action==EditorInfo.IME_ACTION_GO) { applyVerificationCode(television); return true; }
                 return false;
             });
             codeRow.addView(verificationCode, new LinearLayout.LayoutParams(0, dp(56), 1));
-            addButton(codeRow, "Wstaw kod", this::applyVerificationCode);
+            if(!television)addButton(codeRow, "Wstaw kod", this::applyVerificationCode);
             if(television)addButton(codeRow,"Zatwierdź",()->applyVerificationCode(true));
             verificationPanel.addView(codeRow);
-        }
+            if(television)TvFocus.connect(java.util.Arrays.asList(children(codeRow),children(actions)));
+        }else if(television)TvFocus.connect(java.util.Arrays.asList(children(actions)));
         verificationPanel.addView(actions);
         screen.addView(verificationPanel, new FrameLayout.LayoutParams(-1, -1));
         engine.setVisibility(View.VISIBLE);
@@ -574,18 +608,19 @@ public final class SearchActivity extends Activity {
         getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             | android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        engine.requestFocus();
+        if(verificationCode==null)engine.requestFocus();else verificationCode.requestFocus();
         diagnostics.add("search.verification_open", null, 0);
         if ("verification".equals(stage)) {
             engine.getSettings().setUseWideViewPort(false);
             engine.getSettings().setLoadWithOverviewMode(false);
             engine.evaluateJavascript(asset("verification-layout.js"), null);
-            engine.postDelayed(this::showVerificationKeyboard, 250);
+            engine.postDelayed(()->{if(verificationCode!=null&&verificationCode.length()==0)showVerificationKeyboard();},250);
         }
     }
     private void showVerificationKeyboard() {
         if (!active || verificationPanel == null || !UrlPolicy.allowed(engine.getUrl())) return;
         if (verificationCode != null) {
+            if(television)verificationCode.setShowSoftInputOnFocus(true);
             verificationCode.requestFocus();
             verificationCode.post(() -> {
                 if (!active || verificationCode == null) return;
@@ -633,7 +668,7 @@ public final class SearchActivity extends Activity {
     }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
-        if (focused && active && verificationCode != null) verificationCode.post(this::showVerificationKeyboard);
+        if (!television && focused && active && verificationCode != null && verificationCode.length()==0) verificationCode.post(this::showVerificationKeyboard);
     }
     private void cancelVerification() {
         stopSearch();
@@ -645,6 +680,7 @@ public final class SearchActivity extends Activity {
     }
     private void dismissVerification() {
         if (verificationPanel == null) return;
+        if(pointer!=null)pointer.stop();
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(engine.getWindowToken(), 0);
         android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
         if (owner != null) owner.removeView(engine);
@@ -740,7 +776,7 @@ public final class SearchActivity extends Activity {
                 View card=grid.getChildAt(i);
                 card.setNextFocusLeftId(i%columns>0?grid.getChildAt(i-1).getId():card.getId());
                 card.setNextFocusRightId(i%columns<columns-1&&i+1<grid.getChildCount()?grid.getChildAt(i+1).getId():card.getId());
-                card.setNextFocusUpId(i>=columns?grid.getChildAt(i-columns).getId():query.getId());
+                card.setNextFocusUpId(i>=columns?grid.getChildAt(i-columns).getId():View.NO_ID);
                 card.setNextFocusDownId(i+columns<grid.getChildCount()?grid.getChildAt(i+columns).getId():card.getId());
                 final int position=i;
                 card.setOnKeyListener((v,key,event)->{
@@ -757,13 +793,12 @@ public final class SearchActivity extends Activity {
                     else if(key==android.view.KeyEvent.KEYCODE_DPAD_LEFT)target=position%columns>0?position-1:position;
                     else if(key==android.view.KeyEvent.KEYCODE_DPAD_RIGHT)target=position%columns<columns-1&&position+1<grid.getChildCount()?position+1:position;
                     else return false;
-                    if(event.getAction()==android.view.KeyEvent.ACTION_DOWN){if(target<0)query.requestFocus();else grid.getChildAt(target).requestFocus();}
+                    if(event.getAction()==android.view.KeyEvent.ACTION_DOWN){if(target<0)focusAboveGrid(position%columns);else grid.getChildAt(target).requestFocus();}
                     return true;
                 });
             }
             if(grid.getChildCount()>0){
-                query.setNextFocusDownId(grid.getChildAt(0).getId());
-                searchButton.setNextFocusDownId(grid.getChildAt(0).getId());
+                wireSearchNavigation();
                 grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
             }
         }
@@ -829,7 +864,7 @@ public final class SearchActivity extends Activity {
         super.onSaveInstanceState(out);
     }
     @Override protected void onPause() {
-        active = false; pauseSearchTimeout(); handler.removeCallbacksAndMessages(null);
+        active = false; if(pointer!=null)pointer.stop(); pauseSearchTimeout(); handler.removeCallbacksAndMessages(null);
         engine.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }
     @Override protected void onResume() {
@@ -863,3 +898,4 @@ public final class SearchActivity extends Activity {
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }
+

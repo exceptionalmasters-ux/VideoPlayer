@@ -66,7 +66,18 @@ public final class MainActivity extends Activity {
     private EditText codeInput;
     private boolean television;
     private boolean playerFullscreen;
-    private Button tvPlayButton;
+    private Button tvControlsAnchor;
+    private TvPointer pointer;
+    private boolean movieFocused;
+    private LinearLayout tvControls;
+    private void wirePlayerNavigation(){
+        if(!television||web==null||tvControls==null)return;
+        java.util.List<View> toolbar=new java.util.ArrayList<>(),code=new java.util.ArrayList<>();
+        for(int i=0;i<tvControls.getChildCount();i++)toolbar.add(tvControls.getChildAt(i));
+        for(int i=0;i<codeRow.getChildCount();i++)code.add(codeRow.getChildAt(i));
+        java.util.List<java.util.List<View>> rows=TvFocus.connect(java.util.Arrays.asList(toolbar,code));
+        if(codeRow.getVisibility()!=View.VISIBLE)for(View v:toolbar)v.setNextFocusDownId(web.getId());
+    }
     private final java.util.Map<View,Integer> playerChrome=new java.util.IdentityHashMap<>();
     private final PresentationPolicy presentation=new PresentationPolicy();
     private int presentationScan;
@@ -128,16 +139,15 @@ public final class MainActivity extends Activity {
         content.addView(scroll);
         if(television){
             scroll.setVisibility(View.GONE);
-            LinearLayout remote=new LinearLayout(this);
-            remote.setPadding(dp(24),0,dp(24),0);
-            button(remote,"Wyniki",this::showSearch);
-            button(remote,"Play / Pauza",()->tvCommand("toggle"));
-            tvPlayButton=(Button)remote.getChildAt(remote.getChildCount()-1);
-            button(remote,"−10 s",()->tvCommand("back"));
-            button(remote,"+10 s",()->tvCommand("forward"));
-            button(remote,"Pełny ekran",this::enterTvFullscreen);
-            button(remote,"Strona",()->{web.requestFocus();toast("Strzałki przechodzą między elementami strony. OK wybiera, Wstecz wraca do wyników.");});
-            content.addView(remote);
+            tvControls=new LinearLayout(this);tvControls.setPadding(dp(24),0,dp(24),0);
+            button(tvControls,"Wyniki",this::showSearch);
+            button(tvControls,"★",this::bookmark);
+            button(tvControls,"Widok filmu",this::enterTvFullscreen);
+            tvControlsAnchor=(Button)tvControls.getChildAt(tvControls.getChildCount()-1);
+            button(tvControls,"Strona",this::showOriginalPage);
+            button(tvControls,"Kursor",this::togglePointer);
+            button(tvControls,"Opcje",this::tvOptions);
+            content.addView(tvControls);
         }
         LinearLayout tools = new LinearLayout(this);
         button(tools, "Widok filmu", this::focusPlayer);
@@ -148,6 +158,7 @@ public final class MainActivity extends Activity {
         android.widget.HorizontalScrollView toolsScroll = new android.widget.HorizontalScrollView(this);
         toolsScroll.addView(tools);
         content.addView(toolsScroll);
+        if(television)toolsScroll.setVisibility(View.GONE);
         status = new TextView(this);
         status.setTextColor(Color.LTGRAY);
         status.setTextSize(12);
@@ -161,11 +172,13 @@ public final class MainActivity extends Activity {
         codeInput = new EditText(this);
         codeInput.setHint("Kod z obrazka — wpisz tutaj");
         codeInput.setSingleLine(true);
-        TvUi.editor(codeInput);
+        TvUi.editor(codeInput,()->insertVerificationCode(true));
+        codeInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        codeInput.setOnEditorActionListener((view,action,event)->{if(television&&(action==EditorInfo.IME_ACTION_DONE||action==EditorInfo.IME_ACTION_GO)){insertVerificationCode(true);return true;}return false;});
         codeInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         codeInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
         codeRow.addView(codeInput, new LinearLayout.LayoutParams(0, dp(56), 1));
-        button(codeRow,"Wstaw kod",this::insertVerificationCode);
+        if(!television)button(codeRow,"Wstaw kod",this::insertVerificationCode);
         if(television)button(codeRow,"Zatwierdź",()->insertVerificationCode(true));
         content.addView(codeRow);
         web = new WebView(this);
@@ -181,6 +194,11 @@ public final class MainActivity extends Activity {
         FrameLayout.LayoutParams controlsPosition=new FrameLayout.LayoutParams(dp(56),dp(48),android.view.Gravity.TOP|android.view.Gravity.RIGHT);
         controlsPosition.setMargins(dp(12),dp(12),dp(12),dp(12));
         root.addView(fullscreenControls,controlsPosition);
+        if(television){
+            web.setId(View.generateViewId());
+            pointer=new TvPointer(root,web,()->{if(codeRow.getVisibility()==View.VISIBLE)codeInput.requestFocus();else if(tvControlsAnchor!=null)tvControlsAnchor.requestFocus();});
+            wirePlayerNavigation();
+        }
         WebSettings settings = web.getSettings();
         defaultUserAgent = settings.getUserAgentString();
         settings.setJavaScriptEnabled(true);
@@ -243,7 +261,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
-                loadFailed = false;
+                loadFailed = false;movieFocused=false;if(pointer!=null)pointer.stop();
                 if(UrlPolicy.isMovie(url))library.opened(url,MovieLibrary.key(url).equals(launchMovieKey)?launchMovieTitle:"",MovieLibrary.key(url).equals(launchMovieKey)?launchMovieThumbnail:"");
                 if(playerFullscreen)exitPlayerFullscreen(false);
                 presentation.navigation();
@@ -263,7 +281,7 @@ public final class MainActivity extends Activity {
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
-                if(television){web.evaluateJavascript(script("tv-media.js"),null);if(tvPlayButton!=null&&codeRow.getVisibility()!=View.VISIBLE)tvPlayButton.requestFocus();}
+                if(television){web.evaluateJavascript(script("tv-media.js"),null);if(tvControlsAnchor!=null&&codeRow.getVisibility()!=View.VISIBLE)tvControlsAnchor.requestFocus();}
                 inspectVerification(pageGeneration, 0);
                 if (UrlPolicy.isHome(url) && movieNavigation.target() != null) {
                     status.setText("Serwis otworzył stronę główną. Zachowuję wybrany film…");
@@ -430,8 +448,11 @@ public final class MainActivity extends Activity {
         codeRow.setVisibility(visible ? View.VISIBLE : View.GONE);
         web.getSettings().setUseWideViewPort(!visible);
         web.getSettings().setLoadWithOverviewMode(!visible);
+        wirePlayerNavigation();
         if (visible) {
+            movieFocused=false;if(pointer!=null)pointer.stop();
             diagnostics.add("verification.open", web.getUrl(), 0);
+            if(television)codeInput.setShowSoftInputOnFocus(true);
             codeInput.requestFocus();
             codeInput.post(() -> {
                 if (alive && codeRow.getVisibility() == View.VISIBLE)
@@ -440,6 +461,7 @@ public final class MainActivity extends Activity {
         } else {
             ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(codeInput.getWindowToken(),0);
             codeInput.setText("");
+            if(television&&tvControlsAnchor!=null)tvControlsAnchor.requestFocus();
         }
     }
     private void insertVerificationCode() { insertVerificationCode(false); }
@@ -476,7 +498,7 @@ public final class MainActivity extends Activity {
             web.getSettings().setUseWideViewPort(false);web.getSettings().setLoadWithOverviewMode(false);
             if(automatic)presentation.automaticallyEntered();else presentation.userControlled();
             status.setText("Widok filmu");
-            playerFullscreen=true;playerChrome.clear();
+            movieFocused=true;playerFullscreen=true;playerChrome.clear();
             playerUiFlags=getWindow().getDecorView().getSystemUiVisibility();
             for(int i=0;i<content.getChildCount();i++){
                 View child=content.getChildAt(i);
@@ -501,10 +523,12 @@ public final class MainActivity extends Activity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(playerUiFlags);
         diagnostics.add("presentation.controls",web.getUrl(),user?1:0);
-        if(tvPlayButton!=null)tvPlayButton.requestFocus();
+        if(tvControlsAnchor!=null)tvControlsAnchor.requestFocus();
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if(!television)return super.dispatchKeyEvent(event);
+        if(pointer!=null&&pointer.key(event))return true;
+        if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)togglePointer();return true;}
         String command=TvKeys.media(event.getKeyCode());
         if(command!=null){if(event.getAction()==KeyEvent.ACTION_UP)tvCommand(command);return true;}
         if(playerFullscreen||customView!=null){
@@ -517,6 +541,10 @@ public final class MainActivity extends Activity {
             }
         } else if(web!=null&&web.hasFocus()){
             int key=event.getKeyCode();
+            if(movieFocused&&codeRow.getVisibility()!=View.VISIBLE){
+                command=TvKeys.fullscreen(key);
+                if(command!=null){if(event.getAction()==KeyEvent.ACTION_UP){if(command.equals("controls")){if(tvControlsAnchor!=null)tvControlsAnchor.requestFocus();}else tvCommand(command);}return true;}
+            }
             if(key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN||key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT){
                 if(event.getAction()==KeyEvent.ACTION_UP){
                     int meta=(key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_LEFT)?KeyEvent.META_SHIFT_ON:0;
@@ -537,14 +565,33 @@ public final class MainActivity extends Activity {
                 web.getSettings().setUseWideViewPort(false);
                 web.getSettings().setLoadWithOverviewMode(false);
                 diagnostics.add("focus.enter", web.getUrl(), 0);
+                movieFocused=true;
                 status.setText("Widok odtwarzacza • reklamy wewnątrz ramki pozostają aktywne");
             } else if ("\"page\"".equals(result)) {
                 web.getSettings().setUseWideViewPort(true);
                 web.getSettings().setLoadWithOverviewMode(true);
+                movieFocused=false;
                 diagnostics.add("focus.exit", web.getUrl(), 0);
                 status.setText("Pełna strona");
             }
         });
+    }
+    private void togglePointer(){
+        if(pointer==null)return;
+        if(customView!=null)exitFullscreen();
+        boolean on=pointer.toggle();toast(on?"Kursor: strzałki przesuwają · OK klika · Wstecz wyłącza":"Kursor wyłączony");
+    }
+    private void showOriginalPage(){
+        if(pointer!=null)pointer.stop();exitFullscreen();exitPlayerFullscreen();movieFocused=false;
+        web.evaluateJavascript("(function(){if(!document.getElementById('vp-focus-style'))return 'page';return "+script("focus-player.js")+"}())",value->{
+            web.getSettings().setUseWideViewPort(true);web.getSettings().setLoadWithOverviewMode(true);web.requestFocus();
+            status.setText("Pełna strona · Menu włącza kursor pilota");
+        });
+    }
+    private void tvOptions(){
+        new AlertDialog.Builder(this).setTitle("Opcje").setItems(new String[]{"Ulubione","Historia","Odśwież","Wróć do filmu","Diagnostyka"},(d,which)->{
+            if(which==0)showBookmarks();else if(which==1)showCollection("history");else if(which==2)web.reload();else if(which==3){if(movieNavigation.target()!=null)loadPage(movieNavigation.target());}else showDiagnostics();
+        }).setNegativeButton("Zamknij",null).show();
     }
     private void showSearch() {
         startActivity(new Intent(this, SearchActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
@@ -665,7 +712,7 @@ public final class MainActivity extends Activity {
         web.saveState(out); super.onSaveInstanceState(out);
     }
     @Override protected void onPause() {
-        resumed = false; sessionHandler.removeCallbacksAndMessages(null);
+        resumed = false; if(pointer!=null)pointer.stop(); sessionHandler.removeCallbacksAndMessages(null);
         web.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }
     @Override protected void onResume() {
@@ -703,3 +750,4 @@ public final class MainActivity extends Activity {
         parent.addView(button,params);
     }
 }
+

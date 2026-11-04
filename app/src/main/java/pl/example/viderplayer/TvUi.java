@@ -31,8 +31,9 @@ final class TvUi {
     static void focusable(View view) {
         Context context=view.getContext();
         if(!enabled(context))return;
-        view.setId(View.generateViewId());
+        if(view.getId()==View.NO_ID)view.setId(View.generateViewId());
         view.setFocusable(true);view.setFocusableInTouchMode(true);
+        if(view instanceof android.widget.TextView)((android.widget.TextView)view).setTextColor(Color.WHITE);
         StateListDrawable background=new StateListDrawable();
         background.addState(new int[]{android.R.attr.state_focused},shape(context,true));
         background.addState(new int[]{android.R.attr.state_pressed},shape(context,true));
@@ -43,9 +44,12 @@ final class TvUi {
             if(focused)v.requestRectangleOnScreen(new android.graphics.Rect(0,0,v.getWidth(),v.getHeight()),false);
         });
     }
-    static void editor(EditText input) {
+    static void editor(EditText input) { editor(input,null); }
+    static void editor(EditText input,Runnable submit) {
         if(!enabled(input.getContext()))return;
         focusable(input);
+        input.setTextColor(Color.WHITE);input.setHintTextColor(Color.rgb(187,205,211));
+        input.setHighlightColor(Color.argb(120,114,220,196));input.setCursorVisible(true);input.setTextSize(18);
         input.setShowSoftInputOnFocus(false);
         View.OnFocusChangeListener decoration=input.getOnFocusChangeListener();
         input.setOnFocusChangeListener((v,focused)->{
@@ -58,13 +62,22 @@ final class TvUi {
                 if(event.getAction()==KeyEvent.ACTION_DOWN){View next=input.focusSearch(key==KeyEvent.KEYCODE_DPAD_UP?View.FOCUS_UP:View.FOCUS_DOWN);if(next!=null)next.requestFocus();}
                 return true;
             }
-            if(key!=KeyEvent.KEYCODE_DPAD_CENTER && key!=KeyEvent.KEYCODE_ENTER)return false;
-            if(event.getAction()==KeyEvent.ACTION_UP){input.setShowSoftInputOnFocus(true);input.requestFocus();((InputMethodManager)input.getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT);}
+            if(key!=KeyEvent.KEYCODE_DPAD_CENTER&&key!=KeyEvent.KEYCODE_ENTER&&key!=KeyEvent.KEYCODE_NUMPAD_ENTER)return false;
+            if(event.getAction()==KeyEvent.ACTION_UP){
+                boolean confirm=submit!=null&&input.length()>0&&(key!=KeyEvent.KEYCODE_DPAD_CENTER||input.getShowSoftInputOnFocus());
+                if(confirm)submit.run();else keyboard(input);
+            }
             return true;
         });
+    }
+    static void keyboard(EditText input){
+        if(enabled(input.getContext()))input.setShowSoftInputOnFocus(true);
+        input.requestFocus();
+        input.post(()->{if(input.isShown())((InputMethodManager)input.getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT);});
     }
     static void immersive(Activity activity) {
         if(enabled(activity))activity.getWindow().getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 }
+

@@ -84,10 +84,20 @@ public final class TvRemoteTest {
             key(KeyEvent.KEYCODE_DPAD_UP);cardFocus(scenario,1);
             key(KeyEvent.KEYCODE_DPAD_LEFT);cardFocus(scenario,0);
             key(KeyEvent.KEYCODE_DPAD_UP);
-            await(scenario,activity->((View)field(activity,"query")).hasFocus(),"UP must return to the title field");
+            await(scenario,activity->find(activity.getWindow().getDecorView(),"Wyniki").hasFocus(),"UP must reach the collection buttons");
+            key(KeyEvent.KEYCODE_DPAD_RIGHT);
+            await(scenario,activity->find(activity.getWindow().getDecorView(),"Historia").hasFocus(),"RIGHT must reach history");
+            key(KeyEvent.KEYCODE_DPAD_RIGHT);
+            await(scenario,activity->find(activity.getWindow().getDecorView(),"Ulubione").hasFocus(),"RIGHT must reach favorites");
+            key(KeyEvent.KEYCODE_DPAD_UP);
+            await(scenario,activity->find(activity.getWindow().getDecorView(),"Raport").hasFocus(),"UP must reach the action row");
+            key(KeyEvent.KEYCODE_DPAD_LEFT);
+            await(scenario,activity->find(activity.getWindow().getDecorView(),"Mam link").hasFocus(),"LEFT must reach paste link");
+            key(KeyEvent.KEYCODE_DPAD_UP);
+            await(scenario,activity->((View)field(activity,"query")).hasFocus(),"UP through native controls must reach title");
             scenario.onActivity(activity->{
                 android.widget.EditText query=(android.widget.EditText)field(activity,"query");
-                assertTrue("UP from the first row must focus the search field",query.hasFocus());
+                assertTrue("UP through toolbar rows must focus the search field",query.hasFocus());
                 assertFalse("Focusing the title must not open the TV keyboard without OK",query.getShowSoftInputOnFocus());
             });
             key(KeyEvent.KEYCODE_DPAD_DOWN);cardFocus(scenario,0);
@@ -124,12 +134,61 @@ public final class TvRemoteTest {
             assertEquals("true",loaded.get());
             scenario.onActivity(activity->{
                 try{Method show=activity.getClass().getDeclaredMethod("showVerification",String.class);show.setAccessible(true);show.invoke(activity,"verification");}catch(Exception e){throw new AssertionError(e);}
-                ((android.widget.EditText)field(activity,"verificationCode")).setText("remote-code");
+                android.widget.EditText code=(android.widget.EditText)field(activity,"verificationCode");
+                assertTrue("Challenge must focus its native editor",code.hasFocus());
+                assertEquals("TV code must stay readable",android.graphics.Color.WHITE,code.getCurrentTextColor());
+                code.setText("remote-code");
                 Button button=find(activity.getWindow().getDecorView(),"Zatwierdź");assertNotNull(button);assertTrue(button.isFocusable());button.performClick();
             });
             AtomicReference<String> sent=new AtomicReference<>();end=android.os.SystemClock.elapsedRealtime()+10000;
             do{scenario.onActivity(activity->((WebView)field(activity,"engine")).evaluateJavascript("window.submitted||''",sent::set));android.os.SystemClock.sleep(100);}while(!"\"remote-code\"".equals(sent.get())&&android.os.SystemClock.elapsedRealtime()<end);
             assertEquals("\"remote-code\"",sent.get());
+        }
+    }
+    private static void stopNetwork(WebView web){
+        web.stopLoading();web.setWebViewClient(new android.webkit.WebViewClient(){
+            @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,android.webkit.WebResourceRequest request){return new android.webkit.WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream("<!doctype html><html><body></body></html>".getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+        });
+    }
+    @Test public void physicalEnterStartsSearchWithoutAnotherClick(){
+        try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(SearchActivity.class)){
+            scenario.onActivity(activity->{stopNetwork((WebView)field(activity,"engine"));android.widget.EditText query=(android.widget.EditText)field(activity,"query");query.setText("Ronin");query.requestFocus();});
+            key(KeyEvent.KEYCODE_ENTER);
+            scenario.onActivity(activity->{assertTrue(((String)field(activity,"requestedSearch")).endsWith("/Ronin"));assertTrue((Boolean)field(activity,"searchRunning"));});
+        }
+    }
+    @Test public void keyboardDoneStartsSearchAndTitleHasReadableColors(){
+        try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(SearchActivity.class)){
+            scenario.onActivity(activity->{stopNetwork((WebView)field(activity,"engine"));android.widget.EditText query=(android.widget.EditText)field(activity,"query");assertEquals(android.graphics.Color.WHITE,query.getCurrentTextColor());query.setText("Maverick");query.onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);assertTrue(((String)field(activity,"requestedSearch")).endsWith("/Maverick"));assertTrue((Boolean)field(activity,"searchRunning"));});
+        }
+    }
+    private static String evalMovie(ActivityScenario<MainActivity> scenario,String script){
+        AtomicReference<String> value=new AtomicReference<>();scenario.onActivity(activity->((WebView)field(activity,"web")).evaluateJavascript(script,value::set));long end=android.os.SystemClock.elapsedRealtime()+5000;
+        while(value.get()==null&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(50);assertNotNull(value.get());return value.get();
+    }
+    @Test public void compactPlayerUsesRemoteMediaAndVisibleCursorClicksThePage() throws Exception {
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String url="https://vider.info/vid/+fcursortest";
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(new Intent(context,MainActivity.class).setAction(Intent.ACTION_VIEW).setData(android.net.Uri.parse(url)))){
+            String html="<!doctype html><html><body><div class='video-frame'><video></video><button id='target' style='position:fixed;inset:0;width:100vw;height:100vh' onclick='window.clicked=true'>Klik</button></div><script>window.commands=[];window.__vpTvCommand=function(action){window.commands.push(action);return true;};</script></body></html>";
+            scenario.onActivity(activity->{WebView web=(WebView)field(activity,"web");web.stopLoading();web.setWebViewClient(new android.webkit.WebViewClient(){
+                @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,android.webkit.WebResourceRequest request){return new android.webkit.WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+            });web.loadUrl(url+"?fixture=cursor");});
+            long end=android.os.SystemClock.elapsedRealtime()+15000;while(!"true".equals(evalMovie(scenario,"!!document.getElementById('target')"))&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(100);
+            assertEquals("true",evalMovie(scenario,"!!document.getElementById('target')"));
+            scenario.onActivity(activity->{View root=activity.getWindow().getDecorView();assertNull(find(root,"−10 s"));assertNull(find(root,"+10 s"));assertNull(find(root,"Play / Pauza"));Button movie=find(root,"Widok filmu");assertTrue(movie.isShown());assertEquals(android.graphics.Color.WHITE,movie.getCurrentTextColor());find(root,"Kursor").performClick();assertTrue(((TvPointer)field(activity,"pointer")).active());assertTrue(((TvPointer)field(activity,"pointer")).isShown());});
+            AtomicReference<Float> x=new AtomicReference<>();scenario.onActivity(activity->x.set((Float)field(field(activity,"pointer"),"x")));
+            key(KeyEvent.KEYCODE_DPAD_RIGHT);scenario.onActivity(activity->assertTrue((Float)field(field(activity,"pointer"),"x")>x.get()));
+            shell(InstrumentationRegistry.getInstrumentation(),"mkdir -p /sdcard/Download");
+            shell(InstrumentationRegistry.getInstrumentation(),"screencap -p /sdcard/Download/videoplayer-tv-cursor.png");
+            key(KeyEvent.KEYCODE_DPAD_CENTER);
+            end=android.os.SystemClock.elapsedRealtime()+5000;while(!"true".equals(evalMovie(scenario,"window.clicked===true"))&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(100);
+            assertEquals("true",evalMovie(scenario,"window.clicked===true"));
+            key(KeyEvent.KEYCODE_BACK);scenario.onActivity(activity->{assertFalse(((TvPointer)field(activity,"pointer")).active());assertFalse(activity.isFinishing());find(activity.getWindow().getDecorView(),"Widok filmu").performClick();});
+            end=android.os.SystemClock.elapsedRealtime()+10000;AtomicReference<Boolean> full=new AtomicReference<>(false);do{scenario.onActivity(activity->full.set((Boolean)field(activity,"playerFullscreen")));if(full.get())break;android.os.SystemClock.sleep(100);}while(android.os.SystemClock.elapsedRealtime()<end);assertTrue(full.get());
+            key(KeyEvent.KEYCODE_DPAD_LEFT);key(KeyEvent.KEYCODE_DPAD_RIGHT);key(KeyEvent.KEYCODE_DPAD_CENTER);
+            assertEquals("[\"back\",\"forward\",\"toggle\"]",new org.json.JSONTokener(evalMovie(scenario,"JSON.stringify(window.commands)")).nextValue());
+            key(KeyEvent.KEYCODE_DPAD_UP);scenario.onActivity(activity->{assertFalse((Boolean)field(activity,"playerFullscreen"));assertTrue(find(activity.getWindow().getDecorView(),"Widok filmu").hasFocus());});
         }
     }
 }

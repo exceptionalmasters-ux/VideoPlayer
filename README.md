@@ -174,3 +174,12 @@ Wersja desktopowa C# / WPF / WebView2 znajduje się w [`windows`](windows/README
 ## Własne kolekcje (Android 0.7.0 / Windows 0.2.0)
 
 Historia i Ulubione są lokalnymi listami kafelków, niezależnymi od kont Vider i Freedisc. Historia zawiera 200 ostatnio otwieranych filmów, bez duplikatów tego samego filmu. Na Androidzie/TV przytrzymaj kafelek / OK (lub Menu), aby dodać do ulubionych lub usunąć pozycję. W odtwarzaczu służy do tego przycisk ★. Wyczyść wymaga potwierdzenia. Historia i ulubione są usuwane niezależnie. Dotychczasowe zapisane linki Androida są przenoszone do nowych ulubionych. Dla linków bez dostępnej grafiki kafelek ma symbol ▶. Usunięcie danych aplikacji usuwa też lokalne listy.
+
+
+## Sterowanie TV (0.7.1)
+
+Zatwierdzenie wpisanego tytułu przyciskiem klawiatury Szukaj/Gotowe lub Enter uruchamia wyszukiwanie. Dół z pola tytułu prowadzi do miniatur. Góra z pierwszego rzędu kafelków prowadzi do widocznych przycisków nad wynikami; kolejne Góra/Dół i Lewo/Prawo udostępniają wszystkie rzędy przycisków i wybór serwisu. Pola kodu i tytułu mają jasne napisy i wyraźną ramkę fokusu.
+
+Podczas filmu OK przełącza pauzę/odtwarzanie, Lewo/Prawo przewija o 10 sekund, a Góra/Dół lub Wstecz pokazuje pasek aplikacji. Pasek TV nie ma osobnych przycisków Play/Pauza i ±10 sekund. Ulubione, historia, odświeżanie i diagnostyka są dostępne z przycisku Opcje; ★ dodaje/usuwa ulubiony film.
+
+Opcjonalny **Kursor** (również Menu podczas filmu lub potwierdzenia dostępu) pokazuje celownik nad stroną: strzałki przesuwają, OK klika w wybrane miejsce, a Wstecz/Menu wyłącza kursor i przywraca sterowanie przyciskami. To lokalny wskaźnik wewnątrz aplikacji, bez dodatkowych uprawnień systemowych. Kod z obrazka wpisuje użytkownik w podświetlonym polu; Zatwierdź wysyła go przyciskiem oryginalnej strony.
