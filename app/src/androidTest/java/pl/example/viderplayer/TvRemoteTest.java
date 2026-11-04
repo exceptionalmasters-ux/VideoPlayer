@@ -152,8 +152,10 @@ public final class TvRemoteTest {
     }
     @Test public void physicalEnterStartsSearchWithoutAnotherClick(){
         try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(SearchActivity.class)){
-            scenario.onActivity(activity->{stopNetwork((WebView)field(activity,"engine"));android.widget.EditText query=(android.widget.EditText)field(activity,"query");query.setText("Ronin");query.requestFocus();});
+            scenario.onActivity(activity->{stopNetwork((WebView)field(activity,"engine"));android.widget.EditText query=(android.widget.EditText)field(activity,"query");query.setText("Ronin");query.setSelection(query.length());query.setShowSoftInputOnFocus(false);query.requestFocus();((android.view.inputmethod.InputMethodManager)activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(),0);});
+            await(scenario,activity->{View query=(View)field(activity,"query");android.view.WindowInsets insets=query.getRootWindowInsets();return query.hasFocus()&&insets!=null&&!insets.isVisible(android.view.WindowInsets.Type.ime());},"Physical Enter requires title focus after closing the TV keyboard");
             key(KeyEvent.KEYCODE_ENTER);
+            await(scenario,activity->field(activity,"requestedSearch")!=null,"Physical Enter must start search");
             scenario.onActivity(activity->{assertTrue(((String)field(activity,"requestedSearch")).endsWith("/Ronin"));assertTrue((Boolean)field(activity,"searchRunning"));});
         }
     }
@@ -171,7 +173,7 @@ public final class TvRemoteTest {
         String url="https://vider.info/vid/+fcursortest";
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(new Intent(context,MainActivity.class).setAction(Intent.ACTION_VIEW).setData(android.net.Uri.parse(url)))){
             String html="<!doctype html><html><body><div class='video-frame'><video></video><button id='target' style='position:fixed;inset:0;width:100vw;height:100vh' onclick='window.clicked=true'>Klik</button></div><script>window.commands=[];window.__vpTvCommand=function(action){window.commands.push(action);return true;};</script></body></html>";
-            scenario.onActivity(activity->{WebView web=(WebView)field(activity,"web");web.stopLoading();web.setWebViewClient(new android.webkit.WebViewClient(){
+            scenario.onActivity(activity->{((PresentationPolicy)field(activity,"presentation")).userControlled();WebView web=(WebView)field(activity,"web");web.stopLoading();web.setWebViewClient(new android.webkit.WebViewClient(){
                 @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view,android.webkit.WebResourceRequest request){return new android.webkit.WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
             });web.loadUrl(url+"?fixture=cursor");});
             long end=android.os.SystemClock.elapsedRealtime()+15000;while(!"true".equals(evalMovie(scenario,"!!document.getElementById('target')"))&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(100);
