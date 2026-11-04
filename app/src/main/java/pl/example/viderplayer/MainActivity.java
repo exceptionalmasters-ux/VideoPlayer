@@ -63,11 +63,17 @@ public final class MainActivity extends Activity {
     private boolean mobileRedirectRetried;
     private LinearLayout codeRow;
     private EditText codeInput;
+    private boolean television;
+    private boolean tvFullscreen;
+    private Button tvPlayButton;
+    private final java.util.Map<View,Integer> tvChrome=new java.util.IdentityHashMap<>();
 
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        television=TvUi.enabled(this);
+        TvUi.immersive(this);
         root = new FrameLayout(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -82,15 +88,16 @@ public final class MainActivity extends Activity {
         });
         root.requestApplyInsets();
         TextView title = new TextView(this);
-        title.setText("VideoPlayer  /  prototyp");
+        title.setText(television?"VideoPlayer TV · pilot: OK / strzałki / Wstecz":"VideoPlayer  /  prototyp");
         title.setTextColor(Color.rgb(114, 220, 196));
         title.setTextSize(18);
-        title.setPadding(dp(16), dp(14), dp(16), dp(8));
+        title.setPadding(dp(television?32:16), dp(television?4:14), dp(16), dp(television?2:8));
         content.addView(title);
         LinearLayout input = new LinearLayout(this);
         input.setPadding(dp(8), 0, dp(8), 0);
         address = new EditText(this);
         address.setSingleLine(true);
+        TvUi.editor(address);
         address.setHint("Link filmu z Vider lub Freedisc");
         address.setTextSize(14);
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
@@ -98,6 +105,7 @@ public final class MainActivity extends Activity {
         input.addView(address, new LinearLayout.LayoutParams(0, dp(52), 1));
         button(input, "Otwórz", () -> openInput(address.getText().toString()));
         content.addView(input);
+        if(television)input.setVisibility(View.GONE);
         LinearLayout actions = new LinearLayout(this);
         button(actions, "Wyniki", this::showSearch);
         button(actions, "Odśwież", () -> web.reload());
@@ -107,6 +115,19 @@ public final class MainActivity extends Activity {
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(this);
         scroll.addView(actions);
         content.addView(scroll);
+        if(television){
+            scroll.setVisibility(View.GONE);
+            LinearLayout remote=new LinearLayout(this);
+            remote.setPadding(dp(24),0,dp(24),0);
+            button(remote,"Wyniki",this::showSearch);
+            button(remote,"Play / Pauza",()->tvCommand("toggle"));
+            tvPlayButton=(Button)remote.getChildAt(remote.getChildCount()-1);
+            button(remote,"−10 s",()->tvCommand("back"));
+            button(remote,"+10 s",()->tvCommand("forward"));
+            button(remote,"Pełny ekran",this::enterTvFullscreen);
+            button(remote,"Strona",()->{web.requestFocus();toast("Strzałki przechodzą między elementami strony. OK wybiera, Wstecz wraca do wyników.");});
+            content.addView(remote);
+        }
         LinearLayout tools = new LinearLayout(this);
         button(tools, "Widok filmu", this::focusPlayer);
         button(tools, "Wróć do filmu", () -> { if (movieNavigation.target() != null) loadPage(movieNavigation.target()); });
@@ -127,10 +148,12 @@ public final class MainActivity extends Activity {
         codeInput = new EditText(this);
         codeInput.setHint("Kod z obrazka — wpisz tutaj");
         codeInput.setSingleLine(true);
+        TvUi.editor(codeInput);
         codeInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         codeInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
         codeRow.addView(codeInput, new LinearLayout.LayoutParams(0, dp(56), 1));
         button(codeRow,"Wstaw kod",this::insertVerificationCode);
+        if(television)button(codeRow,"Zatwierdź",()->insertVerificationCode(true));
         content.addView(codeRow);
         web = new WebView(this);
         content.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -138,7 +161,7 @@ public final class MainActivity extends Activity {
         defaultUserAgent = settings.getUserAgentString();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setMediaPlaybackRequiresUserGesture(!television);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -197,6 +220,9 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 loadFailed = false;
+                if(tvFullscreen)exitTvFullscreen();
+                web.getSettings().setUseWideViewPort(true);
+                web.getSettings().setLoadWithOverviewMode(true);
                 ++pageGeneration;
                 setCodeVisible(false);
                 diagnostics.add("page.start", url, 0);
@@ -209,6 +235,7 @@ public final class MainActivity extends Activity {
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
+                if(television){web.evaluateJavascript(script("tv-media.js"),null);if(tvPlayButton!=null&&codeRow.getVisibility()!=View.VISIBLE)tvPlayButton.requestFocus();}
                 inspectVerification(pageGeneration, 0);
                 if (UrlPolicy.isHome(url) && movieNavigation.target() != null) {
                     status.setText("Serwis otworzył stronę główną. Zachowuję wybrany film…");
@@ -299,6 +326,8 @@ public final class MainActivity extends Activity {
         } catch (IOException e) { return "''"; }
     }
     private void installDiagnostics() {
+        if(television&&WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+            WebViewCompat.addDocumentStartJavaScript(web,script("tv-media.js"),UrlPolicy.mediaOrigins());
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, script("frame-fit.js"), UrlPolicy.mediaOrigins());
         }
@@ -344,16 +373,74 @@ public final class MainActivity extends Activity {
             codeInput.setText("");
         }
     }
-    private void insertVerificationCode() {
+    private void insertVerificationCode() { insertVerificationCode(false); }
+    private void insertVerificationCode(boolean submit) {
         if (!allowed(web.getUrl()) || codeRow.getVisibility() != View.VISIBLE) return;
         String code = codeInput.getText().toString();
         if (code.isEmpty()) { codeInput.setError("Wpisz kod z obrazka"); return; }
         web.evaluateJavascript(script("verification-fill.js").replace("__VP_MANUAL_CODE__",JSONObject.quote(code)), value -> {
             if ("true".equals(value)) {
                 ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(codeInput.getWindowToken(),0);
-                toast("Kod wstawiony. Użyj przycisku na stronie, aby go zatwierdzić.");
+                if(submit)web.evaluateJavascript(script("verification-submit.js"),sent->toast("true".equals(sent)?"Kod zatwierdzony przyciskiem serwisu.":"Nie znaleziono przycisku. Wybierz Strona i zatwierdź kod na stronie."));
+                else toast("Kod wstawiony. Użyj przycisku na stronie, aby go zatwierdzić.");
             } else toast("Nie znaleziono pola kodu na stronie.");
         });
+    }
+    private void tvCommand(String action) {
+        if(!television||!allowed(web.getUrl()))return;
+        if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
+        diagnostics.add("tv.command."+action,null,0);
+        String command="(function(){return !!(window.__vpTvCommand && window.__vpTvCommand("+JSONObject.quote(action)+"));}())";
+        web.evaluateJavascript(command,value->{if(!"true".equals(value))toast("Nie znaleziono gotowego odtwarzacza. Wybierz Strona i uruchom film.");});
+    }
+    private void enterTvFullscreen() {
+        if(!television||!allowed(web.getUrl()))return;
+        if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
+        String focus="document.getElementById('vp-focus-style') ? 'player' : "+script("focus-player.js");
+        web.evaluateJavascript(focus,value->{
+            if(!"\"player\"".equals(value)){toast("Najpierw uruchom film na stronie.");return;}
+            web.getSettings().setUseWideViewPort(false);web.getSettings().setLoadWithOverviewMode(false);
+            tvFullscreen=true;tvChrome.clear();
+            for(int i=0;i<content.getChildCount();i++){
+                View child=content.getChildAt(i);
+                if(child!=web){tvChrome.put(child,child.getVisibility());child.setVisibility(View.GONE);}
+            }
+            web.requestFocus();
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            toast("OK: pauza/wznów · lewo/prawo: 10 sekund · góra/dół lub Wstecz: przyciski");
+        });
+    }
+    private void exitTvFullscreen() {
+        if(!tvFullscreen)return;
+        tvFullscreen=false;
+        for(java.util.Map.Entry<View,Integer> entry:tvChrome.entrySet())entry.getKey().setVisibility(entry.getValue());
+        tvChrome.clear();
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if(tvPlayButton!=null)tvPlayButton.requestFocus();
+    }
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(!television)return super.dispatchKeyEvent(event);
+        String command=TvKeys.media(event.getKeyCode());
+        if(command!=null){if(event.getAction()==KeyEvent.ACTION_UP)tvCommand(command);return true;}
+        if(tvFullscreen||customView!=null){
+            command=TvKeys.fullscreen(event.getKeyCode());
+            if(command!=null){
+                if(event.getAction()==KeyEvent.ACTION_UP){
+                    if(command.equals("controls")){exitTvFullscreen();exitFullscreen();}
+                    else tvCommand(command);
+                }return true;
+            }
+        } else if(web!=null&&web.hasFocus()){
+            int key=event.getKeyCode();
+            if(key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN||key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT){
+                if(event.getAction()==KeyEvent.ACTION_UP){
+                    int meta=(key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_LEFT)?KeyEvent.META_SHIFT_ON:0;
+                    web.dispatchKeyEvent(new KeyEvent(0,0,KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_TAB,0,meta));
+                    web.dispatchKeyEvent(new KeyEvent(0,0,KeyEvent.ACTION_UP,KeyEvent.KEYCODE_TAB,0,meta));
+                }return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
     private void focusPlayer() {
         if (!allowed(web.getUrl())) return;
@@ -488,7 +575,9 @@ public final class MainActivity extends Activity {
         if (callback != null) callback.onCustomViewHidden();
     }
     @Override public void onBackPressed() {
-        if (customView != null) exitFullscreen();
+        if(tvFullscreen)exitTvFullscreen();
+        else if (customView != null) exitFullscreen();
+        else if(television)finish();
         else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
@@ -503,6 +592,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume(); resumed = true;
+        TvUi.immersive(this);
         if (web != null) {
             web.onResume();
             inspectVerification(pageGeneration, 0);
@@ -523,11 +613,14 @@ public final class MainActivity extends Activity {
     private void button(LinearLayout parent, String text, Runnable action) {
         Button button = new Button(this);
         button.setText(text);
-        button.setTextSize(12);
+        button.setTextSize(television?16:12);
+        TvUi.focusable(button);
         button.setMinWidth(0);
         button.setMinimumWidth(0);
         button.setPadding(dp(8), 0, dp(8), 0);
         button.setOnClickListener(v -> action.run());
-        parent.addView(button, new LinearLayout.LayoutParams(-2, dp(48)));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-2,dp(48));
+        if(television)params.setMargins(dp(4),dp(4),dp(4),dp(4));
+        parent.addView(button,params);
     }
 }

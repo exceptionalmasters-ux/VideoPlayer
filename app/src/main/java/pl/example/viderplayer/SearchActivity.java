@@ -63,14 +63,21 @@ public final class SearchActivity extends Activity {
     private boolean mobileRedirectRetried;
     private boolean freediscRouted;
     private int freediscRouteAttempts;
+    private boolean television;
+    private int selectedResultIndex;
+    private Button searchButton;
     private SiteSource selectedSource = SiteSource.VIDER;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        television=TvUi.enabled(this);
+        TvUi.immersive(this);
+        if(saved!=null)selectedResultIndex=saved.getInt("selectedResultIndex",0);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(17, 24, 32));
+        if(television)root.setPadding(dp(32),dp(10),dp(32),dp(10));
         searchContent = root;
         screen = new FrameLayout(this);
         screen.addView(root, new FrameLayout.LayoutParams(-1, -1));
@@ -81,12 +88,12 @@ public final class SearchActivity extends Activity {
             return insets;
         });
         screen.requestApplyInsets();
-        TextView brand = text("VideoPlayer", 26, Color.WHITE);
+        TextView brand = text(television?"VideoPlayer TV":"VideoPlayer", television?22:26, Color.WHITE);
         brand.setTypeface(null, Typeface.BOLD);
-        brand.setPadding(dp(16), dp(18), dp(16), dp(2));
+        brand.setPadding(dp(16), dp(television?2:18), dp(16), dp(2));
         root.addView(brand);
-        TextView caption = text("Znajdź film i dotknij miniatury", 14, Color.LTGRAY);
-        caption.setPadding(dp(16), 0, dp(16), dp(14));
+        TextView caption = text(television?"Strzałki: wybór · OK: otwórz · Wstecz: powrót":"Znajdź film i dotknij miniatury", 14, Color.LTGRAY);
+        caption.setPadding(dp(16), 0, dp(16), dp(television?4:14));
         root.addView(caption);
         selectedSource = SiteSource.restore(saved != null ? saved.getString("source")
             : getSharedPreferences("sources", MODE_PRIVATE).getString("selected", SiteSource.VIDER.name()));
@@ -98,18 +105,21 @@ public final class SearchActivity extends Activity {
         sourcePicker.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
             new String[]{SiteSource.VIDER.label, SiteSource.FREEDISC.label}));
         sourcePicker.setSelection(selectedSource.ordinal());
-        sourceRow.addView(sourcePicker, new LinearLayout.LayoutParams(0, dp(48), 1));
+        TvUi.focusable(sourcePicker);
+        sourceRow.addView(sourcePicker, new LinearLayout.LayoutParams(0, dp(television?40:48), 1));
         root.addView(sourceRow);
         LinearLayout input = new LinearLayout(this);
         input.setPadding(dp(12), 0, dp(12), 0);
         query = new EditText(this);
         query.setSingleLine(true);
+        TvUi.editor(query);
         query.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});
         query.setHint("Tytuł filmu, np. " + selectedSource.example);
         query.setTextSize(16);
         query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.addView(query, new LinearLayout.LayoutParams(0, dp(52), 1));
         addButton(input, "Szukaj", this::search);
+        searchButton=(Button)input.getChildAt(input.getChildCount()-1);
         root.addView(input);
         LinearLayout actions = new LinearLayout(this);
         addButton(actions, "Mam link", this::pasteLink);
@@ -117,6 +127,7 @@ public final class SearchActivity extends Activity {
         root.addView(actions);
         previewButton = new Button(this);
         previewButton.setText("Pokaż stronę");
+        TvUi.focusable(previewButton);
         previewButton.setVisibility(View.GONE);
         previewButton.setOnClickListener(v -> previewSearch());
         root.addView(previewButton);
@@ -147,10 +158,14 @@ public final class SearchActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(engine, true);
         resultsView = new ScrollView(this);
         grid = new GridLayout(this);
-        grid.setColumnCount(2);
+        grid.setColumnCount(television?4:2);
+        grid.setClipChildren(false);
+        resultsView.setClipToPadding(false);
         grid.setPadding(dp(8), 0, dp(8), dp(16));
         resultsView.addView(grid);
         workspace.addView(resultsView, new FrameLayout.LayoutParams(-1, -1));
+        if(television&&androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT))
+            androidx.webkit.WebViewCompat.addDocumentStartJavaScript(engine,asset("tv-media.js"),UrlPolicy.mediaOrigins());
         engine.setWebChromeClient(new WebChromeClient());
         engine.setDownloadListener((url, userAgent, disposition, mime, length) -> {
             diagnostics.add("search.download_requested", url, 0);
@@ -224,6 +239,7 @@ public final class SearchActivity extends Activity {
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
+        if(television)query.post(query::requestFocus);
         if (saved != null) {
             query.setText(saved.getString("query", ""));
             try { results = new JSONArray(saved.getString("results", "[]")); } catch (Exception ignored) { }
@@ -246,6 +262,8 @@ public final class SearchActivity extends Activity {
         searchReturnUsed = false;
         lastSearchAt = 0;
         results = new JSONArray();
+        selectedResultIndex=0;
+        if(television){query.setNextFocusDownId(View.NO_ID);searchButton.setNextFocusDownId(View.NO_ID);}
         thumbnails.nextGeneration();
         grid.removeAllViews();
         query.setHint("Tytuł filmu, np. " + source.example);
@@ -273,6 +291,8 @@ public final class SearchActivity extends Activity {
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(), 0);
         query.clearFocus();
         results = new JSONArray();
+        selectedResultIndex=0;
+        if(television){query.setNextFocusDownId(View.NO_ID);searchButton.setNextFocusDownId(View.NO_ID);}
         thumbnails.nextGeneration();
         grid.removeAllViews();
         resultsView.setVisibility(View.VISIBLE);
@@ -474,6 +494,7 @@ public final class SearchActivity extends Activity {
         addButton(actions, "Klawiatura", this::showVerificationKeyboard);
         addButton(actions, "Sprawdź", this::retryInspection);
         addButton(actions, "Anuluj", this::cancelVerification);
+        if(television)addButton(actions,"Strona",()->{engine.requestFocus();});
         verificationPanel.addView(engine, new LinearLayout.LayoutParams(-1, 0, 1));
         if ("verification".equals(stage)) {
             LinearLayout codeRow = new LinearLayout(this);
@@ -481,6 +502,7 @@ public final class SearchActivity extends Activity {
             verificationCode = new EditText(this);
             verificationCode.setHint("Kod z obrazka — wpisz tutaj");
             verificationCode.setSingleLine(true);
+            TvUi.editor(verificationCode);
             verificationCode.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
             verificationCode.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
             verificationCode.setImeOptions(EditorInfo.IME_ACTION_DONE);
@@ -490,6 +512,7 @@ public final class SearchActivity extends Activity {
             });
             codeRow.addView(verificationCode, new LinearLayout.LayoutParams(0, dp(56), 1));
             addButton(codeRow, "Wstaw kod", this::applyVerificationCode);
+            if(television)addButton(codeRow,"Zatwierdź",()->applyVerificationCode(true));
             verificationPanel.addView(codeRow);
         }
         verificationPanel.addView(actions);
@@ -539,7 +562,8 @@ public final class SearchActivity extends Activity {
             }, 200);
         });
     }
-    private void applyVerificationCode() {
+    private void applyVerificationCode() { applyVerificationCode(false); }
+    private void applyVerificationCode(boolean submit) {
         if (verificationCode == null || !UrlPolicy.allowed(engine.getUrl())) return;
         String code = verificationCode.getText().toString();
         if (code.isEmpty()) { verificationCode.setError("Wpisz kod z obrazka"); return; }
@@ -549,7 +573,11 @@ public final class SearchActivity extends Activity {
             diagnostics.add("search.manual_code_inserted", null, "true".equals(result) ? 1 : 0);
             if ("true".equals(result)) {
                 ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(verificationCode.getWindowToken(), 0);
-                Toast.makeText(this, "Kod wstawiony. Użyj przycisku „Wchodzę” na stronie.", Toast.LENGTH_LONG).show();
+                if(submit)engine.evaluateJavascript(asset("verification-submit.js"), sent->{
+                    Toast.makeText(this,"true".equals(sent)?"Kod zatwierdzony przyciskiem serwisu.":"Nie znaleziono przycisku. Wybierz Strona i użyj przycisku serwisu.",Toast.LENGTH_LONG).show();
+                    handler.postDelayed(this::retryInspection,1000);
+                });
+                else Toast.makeText(this, "Kod wstawiony. Użyj przycisku „Wchodzę” na stronie.", Toast.LENGTH_LONG).show();
             } else {
                 Toast.makeText(this, "Nie znaleziono pola kodu na stronie. Spróbuj dotknąć go bezpośrednio.", Toast.LENGTH_LONG).show();
             }
@@ -585,6 +613,20 @@ public final class SearchActivity extends Activity {
         searchContent.setVisibility(View.VISIBLE);
         CookieManager.getInstance().flush();
     }
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if(television&&verificationPanel!=null&&engine.hasFocus()){
+            int key=event.getKeyCode();
+            if(key==android.view.KeyEvent.KEYCODE_DPAD_UP||key==android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                ||key==android.view.KeyEvent.KEYCODE_DPAD_DOWN||key==android.view.KeyEvent.KEYCODE_DPAD_RIGHT){
+                if(event.getAction()==android.view.KeyEvent.ACTION_UP){
+                    int meta=(key==android.view.KeyEvent.KEYCODE_DPAD_UP||key==android.view.KeyEvent.KEYCODE_DPAD_LEFT)?android.view.KeyEvent.META_SHIFT_ON:0;
+                    engine.dispatchKeyEvent(new android.view.KeyEvent(0,0,android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_TAB,0,meta));
+                    engine.dispatchKeyEvent(new android.view.KeyEvent(0,0,android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_TAB,0,meta));
+                }return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
     @Override public void onBackPressed() {
         if (verificationPanel != null) cancelVerification();
         else super.onBackPressed();
@@ -597,8 +639,10 @@ public final class SearchActivity extends Activity {
         engine.setVisibility(View.INVISIBLE);
         resultsView.setVisibility(View.VISIBLE);
         grid.removeAllViews();
-        status.setText("Znalezione filmy · " + results.length() + " · dotknij miniatury, aby otworzyć film");
-        int width = (getResources().getDisplayMetrics().widthPixels - dp(40)) / 2;
+        status.setText("Znalezione filmy · " + results.length() + (television?" · wybierz film i naciśnij OK":" · dotknij miniatury, aby otworzyć film"));
+        int columns=television?4:2;
+        int width = (getResources().getDisplayMetrics().widthPixels - dp(television?64+16+columns*12:40)) / columns;
+        int imageHeight=television?width*9/16:dp(116);
         for (int i = 0; i < results.length(); i++) {
             JSONObject result = results.optJSONObject(i);
             if (result == null) continue;
@@ -609,13 +653,15 @@ public final class SearchActivity extends Activity {
             background.setColor(Color.rgb(29, 40, 53));
             background.setCornerRadius(dp(12));
             card.setBackground(background);
+            TvUi.focusable(card);
+            card.setDescendantFocusability(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = width;
-            params.height = dp(204);
+            params.height = television?imageHeight+dp(80):dp(204);
             params.setMargins(dp(6), dp(6), dp(6), dp(6));
             grid.addView(card, params);
             FrameLayout art = new FrameLayout(this);
-            card.addView(art, new LinearLayout.LayoutParams(-1, dp(116)));
+            card.addView(art, new LinearLayout.LayoutParams(-1, imageHeight));
             ImageView image = new ImageView(this);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setBackgroundColor(Color.rgb(36, 61, 72));
@@ -624,7 +670,7 @@ public final class SearchActivity extends Activity {
             TextView play = text("▶", 32, Color.WHITE);
             play.setGravity(Gravity.CENTER);
             art.addView(play, new FrameLayout.LayoutParams(-1, -1));
-            TextView name = text(result.optString("title"), 14, Color.WHITE);
+            TextView name = text(result.optString("title"), television?16:14, Color.WHITE);
             name.setMaxLines(3);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             name.setPadding(dp(10), dp(8), dp(10), dp(4));
@@ -633,8 +679,23 @@ public final class SearchActivity extends Activity {
             host.setPadding(dp(10), 0, dp(10), dp(8));
             card.addView(host);
             card.setContentDescription("Odtwórz " + result.optString("title"));
-            card.setOnClickListener(v -> openMovie(url));
+            final int index=i;
+            card.setOnClickListener(v -> {selectedResultIndex=index;openMovie(url);});
             thumbnails.load(image, url, result.optString("thumbnail"), engine.getSettings().getUserAgentString());
+        }
+        if(television){
+            for(int i=0;i<grid.getChildCount();i++){
+                View card=grid.getChildAt(i);
+                card.setNextFocusLeftId(i%columns>0?grid.getChildAt(i-1).getId():card.getId());
+                card.setNextFocusRightId(i%columns<columns-1&&i+1<grid.getChildCount()?grid.getChildAt(i+1).getId():card.getId());
+                card.setNextFocusUpId(i>=columns?grid.getChildAt(i-columns).getId():query.getId());
+                card.setNextFocusDownId(i+columns<grid.getChildCount()?grid.getChildAt(i+columns).getId():card.getId());
+            }
+            if(grid.getChildCount()>0){
+                query.setNextFocusDownId(grid.getChildAt(0).getId());
+                searchButton.setNextFocusDownId(grid.getChildAt(0).getId());
+                grid.post(()->grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus());
+            }
         }
     }
     private void openMovie(String url) {
@@ -668,6 +729,7 @@ public final class SearchActivity extends Activity {
     private void pasteLink() {
         EditText input = new EditText(this);
         input.setHint("Link filmu z Vider lub Freedisc");
+        TvUi.editor(input);
         new AlertDialog.Builder(this).setTitle("Otwórz link filmu").setView(input)
             .setPositiveButton("Otwórz", (d, w) -> {
                 String url = input.getText().toString().trim();
@@ -683,6 +745,7 @@ public final class SearchActivity extends Activity {
         } catch (java.io.IOException e) { return "'[]'"; }
     }
     @Override protected void onSaveInstanceState(Bundle out) {
+        out.putInt("selectedResultIndex",selectedResultIndex);
         out.putString("source", selectedSource.name());
         out.putString("query", query.getText().toString());
         out.putString("requestedSearch", requestedSearch);
@@ -697,6 +760,9 @@ public final class SearchActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume(); active = true;
+        TvUi.immersive(this);
+        if(television&&grid!=null&&grid.getChildCount()>0&&verificationPanel==null)
+            grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
         if (engine != null) {
             engine.onResume();
             if (searchRunning && verificationPanel == null) armSearchTimeout();
@@ -714,7 +780,9 @@ public final class SearchActivity extends Activity {
         TextView text = new TextView(this); text.setText(value); text.setTextSize(size); text.setTextColor(color); return text;
     }
     private void addButton(LinearLayout row, String title, Runnable action) {
-        Button button = new Button(this); button.setText(title); button.setTextSize(12);
+        Button button = new Button(this); button.setText(title); button.setTextSize(television?16:12);
+        TvUi.focusable(button);
+        if(television)button.setPadding(dp(12),0,dp(12),0);
         button.setOnClickListener(v -> action.run()); row.addView(button);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

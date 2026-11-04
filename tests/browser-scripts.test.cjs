@@ -292,3 +292,38 @@ test('frame sizing ignores messages from unrelated origins or windows',()=>{
     {source:parent,origin:'https://freedisc.pl',data:{type:'vp-frame-fit',enabled:'true'}}
   ]) assert.doesNotThrow(()=>handlers.message(event));
 });
+
+
+test('TV commands use the original player API and do not act on unknown commands',()=>{
+  const calls=[];let state='playing';
+  const player={getState:()=>state,getPosition:()=>6,play:value=>calls.push(['play',value]),
+    pause:value=>calls.push(['pause',value]),seek:value=>calls.push(['seek',value])};
+  const window={jwplayer:()=>player,parent:{},addEventListener(){}};
+  const document={head:null,addEventListener(){}};
+  vm.runInNewContext(asset('tv-media.js'),{window,document});
+  assert.equal(window.__vpTvCommand('toggle'),true);state='paused';window.__vpTvCommand('toggle');
+  window.__vpTvCommand('back');window.__vpTvCommand('forward');
+  assert.deepEqual(calls,[['pause',true],['play',true],['seek',0],['seek',16]]);
+  assert.equal(window.__vpTvCommand('navigate'),false);
+});
+test('TV commands are sent only to known HTTPS embed frames',()=>{
+  const sent=[];
+  const frames=['https://freedisc.pl/embed/video/12','https://ads.example/embed/video/12','http://freedisc.pl/embed/video/12',
+    'https://user:secret@freedisc.pl/embed/video/12','https://freedisc.pl/profile'].map(src=>({src,contentWindow:{postMessage:(data,origin)=>sent.push({data,origin})}}));
+  const window={parent:{},addEventListener(){}};
+  const document={head:null,addEventListener(){},querySelectorAll:selector=>selector==='video'?[]:frames};
+  vm.runInNewContext(asset('tv-media.js'),{window,document,URL,location:{href:'https://freedisc.pl/user,f-12,movie-mp4'}});
+  assert.equal(window.__vpTvCommand('pause'),true);
+  assert.equal(sent.length,1);assert.equal(sent[0].origin,'https://freedisc.pl');assert.equal(sent[0].data.action,'pause');
+});
+test('remote verification submits only a visible confirmation button next to user-filled code',()=>{
+  let clicks=0;
+  const button={textContent:'Wchodzę',getBoundingClientRect:()=>({height:40}),click:()=>clicks++};
+  const form={tagName:'FORM',querySelectorAll:()=>[button],parentElement:null};
+  const input=editableInput({value:'manuallytyped',parentElement:form});
+  assert.equal(vm.runInNewContext(asset('verification-submit.js'),{document:{querySelectorAll:()=>[input]}}),true);
+  assert.equal(clicks,1);
+  input.value='';
+  assert.equal(vm.runInNewContext(asset('verification-submit.js'),{document:{querySelectorAll:()=>[input]}}),false);
+  assert.equal(clicks,1);
+});

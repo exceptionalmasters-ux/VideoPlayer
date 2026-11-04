@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.3.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.6.0.
 
 ## Co działa w kodzie
 
@@ -133,3 +133,18 @@ Dla znanych domen odtwarzacza skrypt startowy wewnątrz ramki odbiera komunikat 
 Rozpoznany formularz CAPTCHA jest dopasowywany do szerokości telefonu: resetuje desktopowe marginesy i minimalne szerokości, powiększa pole i przycisk zatwierdzania oraz przewija formularz do widoku. Wyszukiwarka zachowuje natywne pole kodu i fokus klawiatury; takie pole jest teraz dostępne także przy CAPTCHA na głównej stronie filmu. Wpisanie kodu pozostaje ręczne, przycisk Wstaw kod kopiuje odpowiedź do istniejącego formularza, a zatwierdzenie odbywa się przyciskiem serwisu. Wpisany tekst i sesja nie trafiają do raportu.
 
 Nowe testy rzeczywistego WebView używają lokalnej strony i przechwyconej ramki o początkowej szerokości 1000 px. Sprawdzają rozmiar ramki i wideo, object-fit:contain, przywrócenie viewportu bez ponownego ładowania oraz czytelny formularz bez utraty wpisanej wartości. Dotychczasowe testy klawiatury i kafelków pozostają w CI. Konkretne układy strony i reklam na telefonie wymagają sprawdzenia po aktualizacji.
+
+
+## 0.6.0: Android TV / Google TV i pilot
+
+Ten sam APK rozpoznaje tryb telewizora (UiModeManager lub leanback) i wyświetla interfejs TV. Ma wpis w launcherze Android TV, baner 320×180 px oraz opcjonalną funkcję leanback i brak wymogu ekranu dotykowego. Na telefonie pozostaje dotychczasowy układ. Wymagany jest Android 8.0+ i działający Android System WebView.
+
+Na TV są cztery kolumny kafelków, bezpieczne marginesy od krawędzi ekranu i widoczna miętowa ramka fokusu na kartach, przyciskach i polach. Strzałki poruszają zaznaczeniem; OK otwiera wybrany film. Pierwszy rząd kart prowadzi strzałką w górę do wyszukiwania. Po powrocie z filmu zaznaczony jest ostatnio otwarty kafelek. OK na polu tytułu otwiera systemową klawiaturę ekranową. Wybór źródła Vider/Freedisc działa pilotem.
+
+Odtwarzacz TV ma natywne przyciski Wyniki, Play/Pauza, −10 s, +10 s, Pełny ekran i Strona. Pełny ekran chowa pasek aplikacji i dopasowuje istniejący odtwarzacz. W tym trybie OK pauzuje/wznawia, lewo/prawo przewija o 10 sekund, a góra/dół lub Wstecz przywraca przyciski. Kolejne Wstecz wraca z odtwarzacza do wyników. Dedykowane klawisze multimedialne pilota również są obsługiwane. Przyciski nie pobierają filmu ani nie zastępują odtwarzacza: używają API istniejącego JW Player albo elementu HTML5. Reklamy i ograniczenia przewijania oryginalnego odtwarzacza nadal obowiązują.
+
+Jeśli serwis wymaga własnego kliknięcia lub zgody, przycisk Strona przekazuje sterowanie do WebView. Strzałki przechodzą po elementach strony jak Tab/Shift+Tab, a OK wybiera element. Przy CAPTCHA kod jest wpisywany ręcznie w natywnym polu. Dodatkowy przycisk Zatwierdź, dostępny na TV, wstawia ten kod i po wyraźnym kliknięciu użytkownika uruchamia rozpoznany przycisk potwierdzenia najbliższego formularza. Jeżeli go nie rozpozna, prosi o użycie przycisku serwisu. Nie rozpoznaje obrazka ani nie rozwiązuje CAPTCHA automatycznie. Logowanie i wymagania serwisów pozostają bez zmian.
+
+W trybie TV odtwarzanie JS nie wymaga dodatkowego gestu w WebView, ponieważ polecenie pilota może przejść do ramki przez postMessage. Aplikacja nie wysyła automatycznie polecenia Play. Komunikaty sterowania przyjmowane są tylko od bezpośredniej ramki rodzica z dokładnej dozwolonej domeny HTTPS i zawierają wyłącznie zamkniętą listę poleceń. W raporcie mogą pojawić się zdarzenia tv.command, bez tytułu i wpisanego kodu.
+
+CI oprócz testów telefonu uruchamia emulator Android TV 14 (android-tv, x86, tv_1080p). Testuje launcher TV, nawigację strzałkami między kartami i polem wyszukiwania, wybór filmu klawiszem OK oraz ręczne zatwierdzanie lokalnego formularza. Uruchomienie filmu w teście jest przechwytywane przed otwarciem strony, więc test nie zależy od serwisów. Skrypty testują polecenia odtwarzacza i dopuszczalne ramki; testy jednostkowe mapowanie pilota. Raporty i zrzut ekranu są w tv-test-reports. Odtwarzanie rzeczywistych filmów i konkretnego pilota wymaga sprawdzenia na urządzeniu użytkownika.
