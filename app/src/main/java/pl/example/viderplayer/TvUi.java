@@ -47,6 +47,10 @@ final class TvUi {
         if(!enabled(input.getContext()))return;
         focusable(input);input.setPadding(dp(input.getContext(),12),0,dp(input.getContext(),12),0);
         input.setOnKeyListener((v,key,event)->{
+            if(key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN){
+                if(event.getAction()==KeyEvent.ACTION_DOWN){View next=input.focusSearch(key==KeyEvent.KEYCODE_DPAD_UP?View.FOCUS_UP:View.FOCUS_DOWN);if(next!=null)next.requestFocus();}
+                return true;
+            }
             if(key!=KeyEvent.KEYCODE_DPAD_CENTER && key!=KeyEvent.KEYCODE_ENTER)return false;
             if(event.getAction()==KeyEvent.ACTION_UP){input.requestFocus();((InputMethodManager)input.getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(input,InputMethodManager.SHOW_IMPLICIT);}
             return true;

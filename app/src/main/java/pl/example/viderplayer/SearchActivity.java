@@ -690,6 +690,17 @@ public final class SearchActivity extends Activity {
                 card.setNextFocusRightId(i%columns<columns-1&&i+1<grid.getChildCount()?grid.getChildAt(i+1).getId():card.getId());
                 card.setNextFocusUpId(i>=columns?grid.getChildAt(i-columns).getId():query.getId());
                 card.setNextFocusDownId(i+columns<grid.getChildCount()?grid.getChildAt(i+columns).getId():card.getId());
+                final int position=i;
+                card.setOnKeyListener((v,key,event)->{
+                    int target=position;
+                    if(key==android.view.KeyEvent.KEYCODE_DPAD_UP)target=position-columns;
+                    else if(key==android.view.KeyEvent.KEYCODE_DPAD_DOWN)target=position+columns<grid.getChildCount()?position+columns:position;
+                    else if(key==android.view.KeyEvent.KEYCODE_DPAD_LEFT)target=position%columns>0?position-1:position;
+                    else if(key==android.view.KeyEvent.KEYCODE_DPAD_RIGHT)target=position%columns<columns-1&&position+1<grid.getChildCount()?position+1:position;
+                    else return false;
+                    if(event.getAction()==android.view.KeyEvent.ACTION_DOWN){if(target<0)query.requestFocus();else grid.getChildAt(target).requestFocus();}
+                    return true;
+                });
             }
             if(grid.getChildCount()>0){
                 query.setNextFocusDownId(grid.getChildAt(0).getId());

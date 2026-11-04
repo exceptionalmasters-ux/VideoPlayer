@@ -55,7 +55,7 @@ public final class TvRemoteTest {
             key(KeyEvent.KEYCODE_DPAD_DOWN);
             scenario.onActivity(activity->assertTrue(((GridLayout)field(activity,"grid")).getChildAt(5).hasFocus()));
             key(KeyEvent.KEYCODE_DPAD_UP);key(KeyEvent.KEYCODE_DPAD_LEFT);key(KeyEvent.KEYCODE_DPAD_UP);
-            scenario.onActivity(activity->{assertTrue(((View)field(activity,"query")).hasFocus());});
+            scenario.onActivity(activity->{assertTrue("UP from the first row must focus the search field",((View)field(activity,"query")).hasFocus());});
             key(KeyEvent.KEYCODE_DPAD_DOWN);key(KeyEvent.KEYCODE_DPAD_RIGHT);
             android.graphics.Bitmap screenshot=instrumentation.getUiAutomation().takeScreenshot();
             if(screenshot!=null){try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null),"tv-results.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}
