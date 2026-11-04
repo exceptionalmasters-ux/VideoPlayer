@@ -9,14 +9,21 @@ public final class MovieLibrary {
     public static final int HISTORY_LIMIT=200;
     public static final class Item {
         public final String url,title,thumbnail;
-        public final long opened;
+        public final long opened,position,duration;
+        public final boolean completed;
         public Item(String url,String title,String thumbnail,long opened){
+            this(url,title,thumbnail,opened,0,0,false);
+        }
+        public Item(String url,String title,String thumbnail,long opened,long position,long duration,boolean completed){
             if(!UrlPolicy.isMovie(url))throw new IllegalArgumentException("Movie URL required");
             URI uri=URI.create(url);
             this.url="https://"+uri.getHost().toLowerCase(Locale.ROOT)+uri.getRawPath();
             this.title=title==null?"":title.trim().substring(0,Math.min(title.trim().length(),180));
             this.thumbnail=UrlPolicy.thumbnail(thumbnail)?thumbnail:"";
             this.opened=opened;
+            this.duration=Math.max(0,Math.min(86400,duration));
+            this.completed=completed&&this.duration>0;
+            this.position=this.completed?0:Math.max(0,Math.min(position,this.duration));
         }
         public String key(){return MovieLibrary.key(url);}
     }
@@ -30,7 +37,18 @@ public final class MovieLibrary {
     private static boolean descriptive(String title){return title!=null&&!title.isEmpty()&&!title.startsWith("https://")&&!title.equalsIgnoreCase("Vider.info")&&!title.equalsIgnoreCase("Vider.pl")&&!title.equalsIgnoreCase("Freedisc")&&!title.startsWith("Film · ");}
     private static Item merge(Item old,Item fresh,long opened){
         String title=descriptive(fresh.title)?fresh.title:old!=null&&descriptive(old.title)?old.title:"Film · "+fresh.key().split(":")[1];
-        return new Item(fresh.url,title,!fresh.thumbnail.isEmpty()?fresh.thumbnail:old==null?"":old.thumbnail,opened);
+        return new Item(fresh.url,title,!fresh.thumbnail.isEmpty()?fresh.thumbnail:old==null?"":old.thumbnail,opened,old==null?fresh.position:old.position,old==null?fresh.duration:old.duration,old==null?fresh.completed:old.completed);
+    }
+    /** Checkpoints never reorder collections or resurrect a deleted history entry. Seconds only. */
+    public void progress(String url,long position,long duration,boolean ended){
+        Item old=find(url);if(old==null||duration<=0||duration>86400||position<0||position>duration+2)return;
+        boolean completed=ended||duration-position<=Math.min(30,Math.max(1,duration/50));
+        Item item=new Item(old.url,old.title,old.thumbnail,old.opened,position,duration,completed);
+        updateIn(history,item);updateIn(favorites,item);
+    }
+    public static String clock(long seconds){
+        seconds=Math.max(0,seconds);
+        return seconds>=3600?String.format(Locale.ROOT,"%d:%02d:%02d",seconds/3600,(seconds/60)%60,seconds%60):String.format(Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
     }
     public Item find(String url){String key=key(url);for(Item i:history)if(i.key().equals(key))return i;for(Item i:favorites)if(i.key().equals(key))return i;return null;}
     public boolean favorite(String url){String key=key(url);return !key.isEmpty()&&favorites.stream().anyMatch(i->i.key().equals(key));}
@@ -57,3 +75,4 @@ public final class MovieLibrary {
         for(Item i:items)if(seen.add(i.key())&&(target==favorites||target.size()<HISTORY_LIMIT))target.add(i);
     }
 }
+

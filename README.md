@@ -191,3 +191,9 @@ Kursor porusza się 2× szybciej i obejmuje całe okno aplikacji, w tym pasek na
 Klawiatura TV dla pola kodu wewnątrz strony otrzymuje akcję Gotowe. Po ręcznym wpisaniu kodu akcja ta wywołuje przycisk potwierdzenia oryginalnego formularza; nie rozpoznaje ani nie wpisuje kodu automatycznie. Pola niebędące polem kodu zachowują standardową obsługę WebView.
 
 Widok filmu rozpoznaje również zaufaną stronę embed wybranego filmu i czeka na późno doładowany odtwarzacz po upływie wcześniejszego limitu. Przy wymianie kontenera odtwarzacza w bieżącym dokumencie ponownie ustawia jego układ bez wyjścia z pełnego ekranu. Tymczasowy widok formularza nie wyłącza automatycznej prezentacji po zatwierdzeniu kodu. Widok obrazka reaguje na zmianę rozmiaru okna i późniejsze doładowanie grafiki.
+
+### Wznawianie filmu (Android i Android TV, 0.7.3)
+
+Historia i ulubione zapisują lokalnie pozycję treści co około 5 sekund oraz po pauzie. Kafelek z napisem „Wznów” uruchamia film od zapisanej pozycji po uruchomieniu oryginalnego odtwarzacza. Przytrzymanie kafelka daje opcję „Od początku”. Ostatnie maksymalnie 30 sekund filmu oznacza obejrzaną pozycję i następne otwarcie od początku.
+
+Odczyt używa zdarzeń czasu treści JW Player, pomija zdarzenia reklam i nie usuwa reklam ani ekranów dostępu. Wymagany aktualny Android System WebView. Gdy odtwarzacz nie udostępnia tych zdarzeń, pozycja nie jest zapisywana; nie zgadujemy jej na podstawie reklam. Zmiana wersji filmu o innej długości powoduje odtwarzanie od początku. Historia jest oddzielna na każdym urządzeniu.

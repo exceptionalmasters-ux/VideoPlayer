@@ -128,5 +128,32 @@ public final class AutomaticPresentationTest {
             await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Player wait stopped after old timeout");
         }
     }
+
+    @Test public void progressBridgeResumesContentInsideEmbedAndPersistsPause(){
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        LocalLibrary library=new LocalLibrary(context);library.opened(URL,"Resume fixture","");library.progress(URL,1234,7200,false);
+        String outer="<!doctype html><body data-vp-test='resume'><div class='video-frame'><iframe src='https://vider.info/embed/video/autotest'></iframe></div></body>";
+        String child="<!doctype html><body><video></video><script>window.events={};window.seekedTo=-1;window.player={getState:function(){return 'playing'},on:function(n,f){events[n]=f},seek:function(p){seekedTo=p;setTimeout(function(){events.time({position:p,duration:7200})},20)}};window.jwplayer=function(){return player};</script></body>";
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            scenario.onActivity(activity->{WebView view=web(activity);view.stopLoading();WebViewClient original=view.getWebViewClient();
+                view.setWebViewClient(new WebViewClient(){
+                    @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){String html=r.isForMainFrame()?outer:child;return new WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+                    @Override public void onPageStarted(WebView v,String u,android.graphics.Bitmap b){original.onPageStarted(v,u,b);}
+                    @Override public void onPageFinished(WebView v,String u){original.onPageFinished(v,u);}
+                });view.loadUrl(URL+"?resumeFixture="+java.util.UUID.randomUUID());
+            });
+            long end=SystemClock.elapsedRealtime()+15000;
+            while(!"true".equals(eval(scenario,"!!(document.querySelector('iframe')&&document.querySelector('iframe').contentWindow.events&&document.querySelector('iframe').contentWindow.events.time)"))){if(SystemClock.elapsedRealtime()>end)fail("Embed content observer missing");SystemClock.sleep(100);}
+            // Give the native hello/reply pair time to arrive before the first content event.
+            SystemClock.sleep(300);
+            eval(scenario,"document.querySelector('iframe').contentWindow.events.time({position:0,duration:7200});true");
+            end=SystemClock.elapsedRealtime()+5000;
+            while(!"1234".equals(eval(scenario,"document.querySelector('iframe').contentWindow.seekedTo"))){if(SystemClock.elapsedRealtime()>end)fail("Saved position not delivered into embed");SystemClock.sleep(100);}
+            eval(scenario,"var e=document.querySelector('iframe').contentWindow.events;e.time({position:1260,duration:7200});e.pause();true");
+            end=SystemClock.elapsedRealtime()+5000;
+            while(new LocalLibrary(context).find(URL).position!=1260){if(SystemClock.elapsedRealtime()>end)fail("Paused content time was not persisted");SystemClock.sleep(100);}
+            assertEquals(1260,new LocalLibrary(context).find(URL).position);
+        }finally{library.remove("history",URL);}
+    }
 }
 

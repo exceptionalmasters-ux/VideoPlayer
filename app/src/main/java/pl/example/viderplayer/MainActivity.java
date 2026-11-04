@@ -85,6 +85,7 @@ public final class MainActivity extends Activity {
     private int presentationScan;
     private LocalLibrary library;
     private String launchMovieKey="",launchMovieTitle="",launchMovieThumbnail="";
+    private final java.util.Map<String,String> playbackFrames=new java.util.HashMap<>();
     private int playerUiFlags;
     private Button fullscreenControls;
 
@@ -94,6 +95,7 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         library=new LocalLibrary(this);
         String launchUrl=sharedUrl(getIntent());
+        if(launchUrl!=null&&state==null&&getIntent().getBooleanExtra("fromStart",false)){MovieLibrary.Item saved=library.find(launchUrl);if(saved!=null)library.progress(launchUrl,0,saved.duration,false);}
         if(launchUrl!=null){launchMovieKey=MovieLibrary.key(launchUrl);launchMovieTitle=getIntent().getStringExtra("movieTitle");launchMovieThumbnail=getIntent().getStringExtra("movieThumbnail");}
         television=TvUi.enabled(this);
         TvUi.immersive(this);
@@ -270,7 +272,7 @@ public final class MainActivity extends Activity {
                 ++presentationScan;
                 web.getSettings().setUseWideViewPort(true);
                 web.getSettings().setLoadWithOverviewMode(true);
-                ++pageGeneration;
+                ++pageGeneration;playbackFrames.clear();
                 setCodeVisible(false);
                 diagnostics.add("page.start", url, 0);
                 address.setText(url);
@@ -390,6 +392,29 @@ public final class MainActivity extends Activity {
                     }
                 });
             WebViewCompat.addDocumentStartJavaScript(web, script("media-diagnostics.js"), origins);
+            WebViewCompat.addWebMessageListener(web,"vpPlayback",origins,(view,message,origin,mainFrame,reply)->{
+                if(!alive||message.getType()!=androidx.webkit.WebMessageCompat.TYPE_STRING)return;
+                try{
+                    String raw=message.getData();if(raw==null||raw.length()>4096)return;
+                    JSONObject data=new JSONObject(raw);
+                    String movie=UrlPolicy.isMovie(web.getUrl())?web.getUrl():movieNavigation.target();
+                    if(!UrlPolicy.playback(web.getUrl(),movie)||!UrlPolicy.isMovie(movie))return;
+                    String frame=data.optString("page");
+                    if(!UrlPolicy.playback(frame,movie)||!android.net.Uri.parse(frame).getScheme().equals("https")||!origin.toString().equals(android.net.Uri.parse(frame).getScheme()+"://"+android.net.Uri.parse(frame).getAuthority()))return;
+                    if(UrlPolicy.isMovie(frame)&&!MovieLibrary.key(frame).equals(MovieLibrary.key(movie)))return;
+                    if(SiteSource.fromUrl(movie)==SiteSource.VIDER&&frame.contains("/embed/video/")&&!android.net.Uri.parse(frame).getPath().replaceAll("/$", "").endsWith("/"+MovieLibrary.key(movie).substring("vider:f".length())))return;
+                    if("hello".equals(data.optString("event"))){
+                        if(playbackFrames.size()>32)return;
+                        String token=java.util.UUID.randomUUID().toString();playbackFrames.put(token,MovieLibrary.key(movie));
+                        MovieLibrary.Item saved=library.find(movie);
+                        JSONObject response=new JSONObject().put("token",token).put("position",saved==null?0:saved.position).put("duration",saved==null?0:saved.duration);
+                        reply.postMessage(response.toString());
+                    }else if(MovieLibrary.key(movie).equals(playbackFrames.get(data.optString("token")))){
+                        library.progress(movie,data.optLong("position",-1),data.optLong("duration",-1),data.optBoolean("ended"));
+                    }
+                }catch(Exception ignored){}
+            });
+            WebViewCompat.addDocumentStartJavaScript(web,script("playback-progress.js"),origins);
             diagnostics.add("media.observer.enabled", null, 0);
         } else {
             diagnostics.add("media.observer.unsupported", null, 0);
@@ -732,6 +757,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onPause() {
         resumed = false; if(pointer!=null)pointer.stop(); sessionHandler.removeCallbacksAndMessages(null);
+        web.evaluateJavascript("window.__vpFlushProgress && window.__vpFlushProgress()",null);
         web.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }
     @Override protected void onResume() {

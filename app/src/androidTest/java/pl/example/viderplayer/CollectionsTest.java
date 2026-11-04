@@ -34,11 +34,15 @@ public final class CollectionsTest {
         try{
             assertTrue(prefs.edit().clear().commit());assertTrue(legacy.edit().putString("bookmarks","[{\"url\":\""+a+"\",\"title\":\"Maverick\"}]").commit());
             LocalLibrary library=new LocalLibrary(context);assertTrue(library.favorite(a));
-            library.opened(a,"Maverick","");library.opened(b,"Ronin","");library.opened("https://vider.pl/vid/+fhistorytest","","");
+            library.opened(a,"Maverick","");library.progress(a,3723,7200,false);library.opened(b,"Ronin","");library.opened("https://vider.pl/vid/+fhistorytest","","");
             assertEquals(2,new LocalLibrary(context).items("history").length());
+            assertEquals(3723,new LocalLibrary(context).find(a).position);
+            assertEquals(3723,new LocalLibrary(context).items("favorites").getJSONObject(0).getLong("position"));
             try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(new Intent(context,SearchActivity.class).putExtra("collection","history"))){
                 scenario.onActivity(activity->{try{assertEquals(2,((GridLayout)field(activity,"grid")).getChildCount());((View)field(activity,"clearCollection")).performClick();}catch(Exception e){throw new AssertionError(e);}});
                 clickDialog("Anuluj");assertEquals(2,new LocalLibrary(context).items("history").length());
+            assertEquals(3723,new LocalLibrary(context).find(a).position);
+            assertEquals(3723,new LocalLibrary(context).items("favorites").getJSONObject(0).getLong("position"));
                 scenario.onActivity(activity->{try{((View)field(activity,"clearCollection")).performClick();}catch(Exception e){throw new AssertionError(e);}});
                 clickDialog("Wyczyść");InstrumentationRegistry.getInstrumentation().waitForIdleSync();
                 scenario.onActivity(activity->{try{assertEquals(0,((GridLayout)field(activity,"grid")).getChildCount());show(activity,"favorites");assertEquals(1,((GridLayout)field(activity,"grid")).getChildCount());}catch(Exception e){throw new AssertionError(e);}});
@@ -49,3 +53,4 @@ public final class CollectionsTest {
         }finally{restore(prefs,previous);restore(legacy,old);}
     }
 }
+

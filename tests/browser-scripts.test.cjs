@@ -348,3 +348,37 @@ test('offscreen password templates do not block movie presentation', () => {
   password.getBoundingClientRect=()=>({height:30,top:20,bottom:50,left:0,right:200});
   assert.equal(JSON.parse(vm.runInNewContext(asset('search-state.js'),context)).stage,'login');
 });
+
+function progressFixture(position=0,duration=7200){
+  const messages=[],events={},seeks=[];let now=10000;
+  const player={getState:()=> 'playing',on:(name,fn)=>{events[name]=fn;},seek:value=>seeks.push(value)};
+  const window={vpPlayback:{postMessage:raw=>messages.push(JSON.parse(raw))},jwplayer:()=>player,addEventListener(){}};
+  window.parent=window;
+  const context={window,document:{querySelectorAll:()=>[],addEventListener(){}},location:{href:'https://vider.pl/embed/video/test'},URL,
+    setInterval(){},Date:{now:()=>now}};
+  vm.runInNewContext(asset('playback-progress.js'),context);
+  window.vpPlayback.onmessage({data:JSON.stringify({token:'test-token',position,duration})});
+  return {messages,events,seeks,window,tick:()=>{now+=5000;},time:(p,d=duration)=>events.time({position:p,duration:d})};
+}
+test('resume waits for content time, seeks once and never saves startup zero',()=>{
+  const f=progressFixture(1800);f.time(0);assert.deepEqual(f.seeks,[1800]);assert.equal(f.messages.length,1);
+  f.time(1801);assert.equal(f.messages.at(-1).position,1801);assert.equal(f.messages.at(-1).token,'test-token');
+  f.time(1802);assert.equal(f.seeks.length,1);assert.equal(f.messages.length,2);
+  f.tick();f.time(1806);assert.equal(f.messages.at(-1).position,1806);
+});
+test('advertising time and pauses cannot replace film checkpoint or trigger resume',()=>{
+  const f=progressFixture(300);f.events.adStarted();f.time(4,30);f.events.pause();assert.equal(f.messages.length,1);assert.equal(f.seeks.length,0);
+  f.events.adComplete();f.time(0);assert.deepEqual(f.seeks,[300]);f.time(301);f.events.adStarted();f.time(5,30);f.events.pause();assert.equal(f.messages.at(-1).position,301);
+});
+test('failed resume retries are bounded and preserve the stored timestamp',()=>{
+  const f=progressFixture(800);for(let i=0;i<10;i++){f.time(0);f.tick();}assert.equal(f.seeks.length,3);assert.equal(f.messages.length,1);
+});
+test('pause and completion flush content immediately, changed editions start fresh',()=>{
+  const f=progressFixture();f.time(100);f.time(101);f.events.pause();assert.equal(f.messages.at(-1).position,101);
+  f.events.complete();assert.equal(f.messages.at(-1).ended,true);assert.equal(f.messages.at(-1).position,7200);
+  const other=progressFixture(600);other.time(1,3600);assert.equal(other.seeks.length,0);assert.equal(other.messages.at(-1).duration,3600);
+});
+test('progress rejects live and invalid times and is idempotent without a native bridge',()=>{
+  const f=progressFixture();f.time(20,Infinity);f.time(-1);f.time(90000);assert.equal(f.messages.length,1);
+  assert.doesNotThrow(()=>vm.runInNewContext(asset('playback-progress.js'),{window:{}}));
+});

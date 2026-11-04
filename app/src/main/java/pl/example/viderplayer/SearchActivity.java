@@ -321,7 +321,12 @@ public final class SearchActivity extends Activity {
         final String url=item.optString("url");
         boolean favorite=library.favorite(url);
         String[] options="history".equals(collection)?new String[]{favorite?"Usuń z ulubionych":"Dodaj do ulubionych","Usuń z historii"}:new String[]{favorite?"Usuń z ulubionych":"Dodaj do ulubionych"};
+        MovieLibrary.Item saved=library.find(url);
+        if(saved!=null&&saved.position>0){String[] more=java.util.Arrays.copyOf(options,options.length+1);more[options.length]="Od początku";options=more;}
+        final int restartIndex=options.length-1;
+        final boolean canRestart=saved!=null&&saved.position>0;
         new AlertDialog.Builder(this).setTitle(item.optString("title")).setItems(options,(d,which)->{
+            if(canRestart&&which==restartIndex){openMovie(url,true);return;}
             if(which==0)library.toggle(url,item.optString("title"),item.optString("thumbnail"));
             else library.remove("history",url);
             int previousIndex=selectedResultIndex;showCollection(collection);selectedResultIndex=previousIndex;
@@ -775,10 +780,13 @@ public final class SearchActivity extends Activity {
             name.setPadding(dp(10), dp(8), dp(10), dp(4));
             card.addView(name);
             TextView host = text(Uri.parse(url).getHost(), 11, Color.rgb(114, 220, 196));
+            MovieLibrary.Item saved=library.find(url);
+            if(saved!=null&&saved.position>0)host.setText("Wznów · "+MovieLibrary.clock(saved.position)+" / "+MovieLibrary.clock(saved.duration));
+            else if(saved!=null&&saved.completed)host.setText("Obejrzano · od początku");
             if(library.favorite(url))host.setText("★ "+host.getText());
             host.setPadding(dp(10), 0, dp(10), dp(8));
             card.addView(host);
-            card.setContentDescription("Odtwórz " + result.optString("title"));
+            card.setContentDescription("Odtwórz " + result.optString("title")+" · "+host.getText());
             final int index=i;
             card.setOnClickListener(v -> {selectedResultIndex=index;openMovie(url);});
             card.setOnLongClickListener(v->{selectedResultIndex=index;cardActions(result);return true;});
@@ -816,13 +824,14 @@ public final class SearchActivity extends Activity {
             }
         }
     }
-    private void openMovie(String url) {
+    private void openMovie(String url) {openMovie(url,false);}
+    private void openMovie(String url,boolean fromStart) {
         if (!UrlPolicy.isMovie(url)) return;
         CookieManager.getInstance().flush();
         String title="",thumbnail="";
         for(int i=0;i<results.length();i++){JSONObject item=results.optJSONObject(i);if(item!=null&&MovieLibrary.key(url).equals(MovieLibrary.key(item.optString("url")))){title=item.optString("title");thumbnail=item.optString("thumbnail");break;}}
         library.opened(url,title,thumbnail);
-        startActivity(new Intent(this, MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)).putExtra("movieTitle",title).putExtra("movieThumbnail",thumbnail));
+        startActivity(new Intent(this, MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)).putExtra("movieTitle",title).putExtra("movieThumbnail",thumbnail).putExtra("fromStart",fromStart));
     }
     private void exportReport() {
         diagnostics.add("search.report_export_requested", engine.getUrl(), engine.getProgress());
