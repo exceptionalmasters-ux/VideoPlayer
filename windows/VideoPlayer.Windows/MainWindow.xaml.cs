@@ -173,7 +173,7 @@ public partial class MainWindow : Window
                 if (mode == Mode.Movie)
                 {
                     presentation.Blocked(); ExitFullscreen();
-                    await Eval("document.getElementById('vp-focus-style') ? " + Script("focus-player.js") + " : 'page'");
+                    await Eval("(function(){if(!document.getElementById('vp-focus-style'))return 'page';return " + Script("focus-player.js") + "}())");
                 }
                 ShowBrowser();
                 Status.Text = "Serwis wymaga kodu, zgody lub logowania. Dokończ ten krok na stronie; aplikacja sprawdzi ją ponownie.";
@@ -373,7 +373,7 @@ public partial class MainWindow : Window
     private async void PageClick(object sender, RoutedEventArgs e)
     {
         LeaveFullscreen(); ShowBrowser();
-        try { await Eval("document.getElementById('vp-focus-style') ? " + Script("focus-player.js") + " : 'page'"); } catch (Exception error) { Log("page." + error.GetType().Name); }
+        try { await Eval("(function(){if(!document.getElementById('vp-focus-style'))return 'page';return " + Script("focus-player.js") + "}())"); } catch (Exception error) { Log("page." + error.GetType().Name); }
     }
     private void FullscreenClick(object sender, RoutedEventArgs e) => ToggleFullscreen();
     private void ReturnClick(object sender, RoutedEventArgs e) { if (movieTarget != null) OpenMovie(movieTarget); }
@@ -413,7 +413,7 @@ public partial class MainWindow : Window
         if (await Browser.ExecuteScriptAsync("!!document.getElementById('vp-focus-style') && document.querySelector('video').paused") != "true") throw new Exception("Focus or no-autoplay failed");
         LeaveFullscreen();
         if (fullscreen || presentation.Pending || Header.Visibility != Visibility.Visible) throw new Exception("Escape did not restore controls");
-        await Eval("document.getElementById('vp-focus-style') ? " + Script("focus-player.js") + " : 'page'");
+        await Eval("(function(){if(!document.getElementById('vp-focus-style'))return 'page';return " + Script("focus-player.js") + "}())");
         if (await Browser.ExecuteScriptAsync("!!document.getElementById('vp-focus-style')") != "false") throw new Exception("Page restore failed");
         var state = await Eval("document.body.insertAdjacentHTML('beforeend', '<input name=\"captcha_code\" id=\"challenge\">');" + Script("search-state.js"));
         if (state == null || !state.Contains("verification")) throw new Exception("Challenge detection failed");
