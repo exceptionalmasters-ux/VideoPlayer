@@ -22,7 +22,9 @@ legacy=f'''<vector xmlns:android="http://schemas.android.com/apk/res/android" xm
 adaptive='''<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@drawable/ic_launcher_background"/><foreground android:drawable="@drawable/ic_launcher_foreground"/>{}</adaptive-icon>'''
 (RES/'mipmap-anydpi-v26/ic_launcher.xml').write_text(adaptive.format(''))
 (RES/'mipmap-anydpi-v33/ic_launcher.xml').write_text(adaptive.format('<monochrome android:drawable="@drawable/ic_launcher_monochrome"/>'))
-(RES/'values/icons.xml').write_text('<resources><item type="mipmap" name="ic_launcher">@drawable/app_icon</item></resources>')
+(RES/'mipmap-anydpi').mkdir(exist_ok=True)
+(RES/'mipmap-anydpi/ic_launcher.xml').write_text(legacy)
+(RES/'values/icons.xml').unlink(missing_ok=True)
 svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="18 18 72 72"><defs><linearGradient id="bg" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#1A3344"/><stop offset="1" stop-color="#0A1422"/></linearGradient><linearGradient id="mint" x1="30" y1="28" x2="30" y2="81" gradientUnits="userSpaceOnUse"><stop stop-color="#B2FFE9"/><stop offset="0.5" stop-color="#72DCC4"/><stop offset="1" stop-color="#25ADA7"/></linearGradient></defs><rect x="18" y="18" width="72" height="72" rx="18" fill="url(#bg)"/><path d="{OUTER} {INNER}" fill-rule="evenodd" fill="url(#mint)"/><path d="{FOLD}" fill="#064E61" opacity="0.18"/><path d="{GLOW}" fill="none" stroke="white" stroke-opacity="0.28" stroke-width="0.8" stroke-linecap="round"/></svg>'''
 (ROOT/'design/app-icon.svg').write_text(svg)
 # Sample exactly the same M/L/C/Z geometry for previews; Android uses the vector above.
