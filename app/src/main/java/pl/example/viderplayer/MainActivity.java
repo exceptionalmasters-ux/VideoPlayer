@@ -38,6 +38,7 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 /** Prototype: delegates playback to the site's own player; no stream extraction. */
 public final class MainActivity extends Activity {
@@ -64,9 +65,13 @@ public final class MainActivity extends Activity {
     private LinearLayout codeRow;
     private EditText codeInput;
     private boolean television;
-    private boolean tvFullscreen;
+    private boolean playerFullscreen;
     private Button tvPlayButton;
-    private final java.util.Map<View,Integer> tvChrome=new java.util.IdentityHashMap<>();
+    private final java.util.Map<View,Integer> playerChrome=new java.util.IdentityHashMap<>();
+    private final PresentationPolicy presentation=new PresentationPolicy();
+    private int presentationScan;
+    private int playerUiFlags;
+    private Button fullscreenControls;
 
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -130,6 +135,7 @@ public final class MainActivity extends Activity {
         }
         LinearLayout tools = new LinearLayout(this);
         button(tools, "Widok filmu", this::focusPlayer);
+        if(!television)button(tools,"Pełny ekran",this::enterTvFullscreen);
         button(tools, "Wróć do filmu", () -> { if (movieNavigation.target() != null) loadPage(movieNavigation.target()); });
         button(tools, "Diagnostyka", this::showDiagnostics);
         android.widget.HorizontalScrollView toolsScroll = new android.widget.HorizontalScrollView(this);
@@ -157,6 +163,17 @@ public final class MainActivity extends Activity {
         content.addView(codeRow);
         web = new WebView(this);
         content.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
+        fullscreenControls=new Button(this);
+        fullscreenControls.setText("☰");
+        fullscreenControls.setTextSize(20);
+        fullscreenControls.setContentDescription("Pokaż przyciski odtwarzacza");
+        fullscreenControls.setBackgroundColor(Color.argb(170,17,24,32));
+        fullscreenControls.setTextColor(Color.WHITE);
+        fullscreenControls.setVisibility(View.GONE);
+        fullscreenControls.setOnClickListener(v->exitPlayerFullscreen());
+        FrameLayout.LayoutParams controlsPosition=new FrameLayout.LayoutParams(dp(56),dp(48),android.view.Gravity.TOP|android.view.Gravity.RIGHT);
+        controlsPosition.setMargins(dp(12),dp(12),dp(12),dp(12));
+        root.addView(fullscreenControls,controlsPosition);
         WebSettings settings = web.getSettings();
         defaultUserAgent = settings.getUserAgentString();
         settings.setJavaScriptEnabled(true);
@@ -220,7 +237,9 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 loadFailed = false;
-                if(tvFullscreen)exitTvFullscreen();
+                if(playerFullscreen)exitPlayerFullscreen(false);
+                presentation.navigation();
+                ++presentationScan;
                 web.getSettings().setUseWideViewPort(true);
                 web.getSettings().setLoadWithOverviewMode(true);
                 ++pageGeneration;
@@ -280,6 +299,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) { callback.onCustomViewHidden(); return; }
+                presentation.userControlled();
                 diagnostics.add("fullscreen.enter", web.getUrl(), 0);
                 customView = view;
                 fullscreenCallback = callback;
@@ -348,13 +368,53 @@ public final class MainActivity extends Activity {
         }
     }
     private void inspectVerification(int generation, int attempt) {
-        if (!alive || !resumed || generation != pageGeneration || !allowed(web.getUrl())) return;
-        web.evaluateJavascript(script("verification-layout.js"), value -> {
-            if (!alive || !resumed || generation != pageGeneration) return;
-            boolean visible = "true".equals(value);
-            setCodeVisible(visible);
-            if (visible || attempt < 10) sessionHandler.postDelayed(() -> inspectVerification(generation, attempt + 1), 1500);
+        inspectPresentation(generation,++presentationScan,0);
+    }
+    private boolean currentPresentation(int generation,int scan){
+        return alive&&resumed&&generation==pageGeneration&&scan==presentationScan&&allowed(web.getUrl());
+    }
+    private void inspectPresentation(int generation,int scan,int attempt){
+        if(!currentPresentation(generation,scan))return;
+        web.evaluateJavascript(script("search-state.js"),value->{
+            if(!currentPresentation(generation,scan))return;
+            String stage="results";
+            try{stage=new JSONObject((String)new JSONTokener(value).nextValue()).optString("stage","results");}
+            catch(Exception ignored){ }
+            final boolean blocked=!"results".equals(stage);
+            if(blocked){
+                presentation.accessBlocked();
+                if(playerFullscreen)exitPlayerFullscreen(false);
+                // Use a complete expression rather than toggling an already restored page.
+                String restore="(function(){if(!document.getElementById('vp-focus-style'))return 'page';return "+script("focus-player.js")+"}())";
+                web.evaluateJavascript(restore,restored->{
+                    if(!currentPresentation(generation,scan))return;
+                    web.evaluateJavascript(script("verification-layout.js"),visible->{
+                        if(!currentPresentation(generation,scan))return;
+                        setCodeVisible("true".equals(visible));
+                        schedulePresentation(generation,scan,attempt,true);
+                    });
+                });
+            }else{
+                web.evaluateJavascript(script("verification-layout.js"),visible->{
+                    if(!currentPresentation(generation,scan))return;
+                    setCodeVisible("true".equals(visible));
+                    if(presentation.shouldEnter()&&UrlPolicy.isMovie(web.getUrl())&&attempt<60)
+                        enterPlayerFullscreen(generation,true);
+                    schedulePresentation(generation,scan,attempt,false);
+                });
+            }
         });
+    }
+    private void schedulePresentation(int generation,int scan,int attempt,boolean blocked){
+        if(!currentPresentation(generation,scan))return;
+        if(attempt==60&&presentation.shouldEnter()&&UrlPolicy.isMovie(web.getUrl())&&!blocked){
+            diagnostics.add("presentation.player_not_ready",web.getUrl(),0);
+            status.setText("Nie wykryto gotowego odtwarzacza. Możesz otworzyć widok filmu ręcznie.");
+        }
+        if(blocked||playerFullscreen||presentation.shouldEnter()&&attempt<60||attempt<10){
+            int nextAttempt=blocked?0:attempt+1;
+            sessionHandler.postDelayed(()->inspectPresentation(generation,scan,nextAttempt),1500);
+        }
     }
     private void setCodeVisible(boolean visible) {
         if (visible == (codeRow.getVisibility() == View.VISIBLE)) return;
@@ -394,39 +454,55 @@ public final class MainActivity extends Activity {
         web.evaluateJavascript(command,value->{if(!"true".equals(value))toast("Nie znaleziono gotowego odtwarzacza. Wybierz Strona i uruchom film.");});
     }
     private void enterTvFullscreen() {
-        if(!television||!allowed(web.getUrl()))return;
-        if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
+        enterPlayerFullscreen(pageGeneration,false);
+    }
+    private void enterPlayerFullscreen(int generation,boolean automatic){
+        if(!alive||!resumed||generation!=pageGeneration||!allowed(web.getUrl())||playerFullscreen)return;
+        if(automatic&&!presentation.shouldEnter())return;
+        if(codeRow.getVisibility()==View.VISIBLE){if(!automatic)toast("Najpierw dokończ weryfikację kodu.");return;}
         String focus="document.getElementById('vp-focus-style') ? 'player' : "+script("focus-player.js");
         web.evaluateJavascript(focus,value->{
-            if(!"\"player\"".equals(value)){toast("Najpierw uruchom film na stronie.");return;}
+            if(!alive||!resumed||generation!=pageGeneration||playerFullscreen||automatic&&!presentation.shouldEnter())return;
+            if(!"\"player\"".equals(value)){if(!automatic)toast("Najpierw uruchom film na stronie.");return;}
             web.getSettings().setUseWideViewPort(false);web.getSettings().setLoadWithOverviewMode(false);
-            tvFullscreen=true;tvChrome.clear();
+            if(automatic)presentation.automaticallyEntered();else presentation.userControlled();
+            status.setText("Widok filmu");
+            playerFullscreen=true;playerChrome.clear();
+            playerUiFlags=getWindow().getDecorView().getSystemUiVisibility();
             for(int i=0;i<content.getChildCount();i++){
                 View child=content.getChildAt(i);
-                if(child!=web){tvChrome.put(child,child.getVisibility());child.setVisibility(View.GONE);}
+                if(child!=web){playerChrome.put(child,child.getVisibility());child.setVisibility(View.GONE);}
             }
+            fullscreenControls.setVisibility(television?View.GONE:View.VISIBLE);
             web.requestFocus();
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            toast("OK: pauza/wznów · lewo/prawo: 10 sekund · góra/dół lub Wstecz: przyciski");
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            diagnostics.add(automatic?"presentation.auto_fullscreen":"presentation.fullscreen",web.getUrl(),0);
+            if(!automatic&&television)toast("OK: pauza/wznów · lewo/prawo: 10 sekund · Wstecz: przyciski");
         });
     }
-    private void exitTvFullscreen() {
-        if(!tvFullscreen)return;
-        tvFullscreen=false;
-        for(java.util.Map.Entry<View,Integer> entry:tvChrome.entrySet())entry.getKey().setVisibility(entry.getValue());
-        tvChrome.clear();
+    private void exitPlayerFullscreen(){exitPlayerFullscreen(true);}
+    private void exitPlayerFullscreen(boolean user){
+        if(user)presentation.userControlled();
+        if(!playerFullscreen)return;
+        playerFullscreen=false;
+        for(java.util.Map.Entry<View,Integer> entry:playerChrome.entrySet())entry.getKey().setVisibility(entry.getValue());
+        playerChrome.clear();
+        fullscreenControls.setVisibility(View.GONE);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().getDecorView().setSystemUiVisibility(playerUiFlags);
+        diagnostics.add("presentation.controls",web.getUrl(),user?1:0);
         if(tvPlayButton!=null)tvPlayButton.requestFocus();
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if(!television)return super.dispatchKeyEvent(event);
         String command=TvKeys.media(event.getKeyCode());
         if(command!=null){if(event.getAction()==KeyEvent.ACTION_UP)tvCommand(command);return true;}
-        if(tvFullscreen||customView!=null){
+        if(playerFullscreen||customView!=null){
             command=TvKeys.fullscreen(event.getKeyCode());
             if(command!=null){
                 if(event.getAction()==KeyEvent.ACTION_UP){
-                    if(command.equals("controls")){exitTvFullscreen();exitFullscreen();}
+                    if(command.equals("controls")){exitPlayerFullscreen();exitFullscreen();}
                     else tvCommand(command);
                 }return true;
             }
@@ -445,6 +521,7 @@ public final class MainActivity extends Activity {
     private void focusPlayer() {
         if (!allowed(web.getUrl())) return;
         if (codeRow.getVisibility() == View.VISIBLE) { toast("Najpierw dokończ weryfikację kodu."); return; }
+        presentation.userControlled();
         web.evaluateJavascript(script("focus-player.js"), result -> {
             if ("\"missing\"".equals(result)) toast("Nie znaleziono odtwarzacza. Otwórz pełną stronę filmu i uruchom odtwarzanie.");
             else if ("\"player\"".equals(result)) {
@@ -575,8 +652,8 @@ public final class MainActivity extends Activity {
         if (callback != null) callback.onCustomViewHidden();
     }
     @Override public void onBackPressed() {
-        if(tvFullscreen)exitTvFullscreen();
-        else if (customView != null) exitFullscreen();
+        if(customView!=null){exitFullscreen();if(playerFullscreen)exitPlayerFullscreen();else presentation.userControlled();}
+        else if(playerFullscreen)exitPlayerFullscreen();
         else if(television)finish();
         else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
@@ -603,6 +680,7 @@ public final class MainActivity extends Activity {
         alive = false;
         sessionHandler.removeCallbacksAndMessages(null);
         exitFullscreen();
+        if(playerFullscreen)exitPlayerFullscreen(false);
         content.removeView(web);
         web.stopLoading();
         web.destroy();

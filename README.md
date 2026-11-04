@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.6.1.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.6.2.
 
 ## Co działa w kodzie
 
@@ -155,3 +155,14 @@ CI oprócz testów telefonu uruchamia emulator Android TV 14 (android-tv, x86, t
 Nowa ikona to zaokrąglony, miętowy symbol odtwarzania z delikatnym gradientem na granatowym tle. Zawiera adaptacyjny wariant Android 8+ i osobną warstwę monochromatyczną dla ikon tematycznych Androida 13+. Znak mieści się w bezpiecznej strefie maskowania ikony. Baner Android TV 320×180 px korzysta z tego samego znaku. Manifest wskazuje wspólną ikonę launcher i roundIcon.
 
 W `design/app-icon.svg` znajduje się edytowalny projekt, w `design/app-icon-preview.png` podgląd. Skrypt `python3 tools/generate_icon.py` (Pillow) odtwarza zasoby wektorowe i PNG. Gotowe zasoby są zapisane w repozytorium; Pillow nie jest potrzebny do kompilacji ani działania APK. Wersja zmienia grafikę i numer aktualizacji, bez zmian w logice wyszukiwania, pilota i odtwarzania.
+
+
+## 0.6.2: domyślny widok filmu i pełny ekran
+
+Po otwarciu strony filmu aplikacja czeka na istniejący odtwarzacz, dopasowuje go tak jak przyciskiem Widok filmu i automatycznie przechodzi na pełny ekran aplikacji. Działa to na telefonie, tablecie i TV. Ukrywane są paski aplikacji oraz systemowe, a film pozostaje w oryginalnej, już załadowanej ramce z jej reklamami i kontrolkami. Nie jest to automatyczne wywołanie browser requestFullscreen ani polecenie Play; rozpoczęcie odtwarzania nadal zależy od oryginalnego odtwarzacza i gestu użytkownika.
+
+Wstecz pokazuje przyciski aplikacji i pozostawia widok filmu; do końca tego dokumentu nie wymusza ponownie pełnego ekranu. Na telefonie/tablecie jest również mały przycisk ☰ do pokazania sterowania i przycisk Pełny ekran do ponownego wejścia. Na TV działają dotychczasowe klawisze pilota. Nowa nawigacja lub odświeżenie ponownie włącza domyślną prezentację.
+
+CAPTCHA, zgoda lub widoczne logowanie wstrzymują automatyczny widok. Jeżeli wymagany krok pojawi się później, aplikacja przywraca stronę i sterowanie; kod może zostać wpisany w natywnym polu. Czas potrzebny użytkownikowi nie wyczerpuje limitu wykrywania odtwarzacza. Po zakończeniu kroku automatyczny pełny ekran może wrócić, o ile użytkownik sam nie wyłączył tego trybu. Odczyt widoczności uwzględnia też gałęzie ukryte wcześniej przez Widok filmu, bez zmiany oryginalnych ukrytych formularzy serwisu.
+
+Polityka automatycznego wejścia, powrotu po weryfikacji i respektowania Wstecz ma testy jednostkowe. Testy skryptu sprawdzają wykrywanie późniejszej weryfikacji w ukrytej gałęzi. Testy instrumentacyjne na telefonie i TV używają lokalnych stron: automatyczne dopasowanie i pełny ekran, brak automatycznego Play, Wstecz bez ponownego wymuszenia trybu, opóźniony odtwarzacz oraz pojawienie się formularza kodu już po wejściu w pełny ekran.

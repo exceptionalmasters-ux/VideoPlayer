@@ -327,3 +327,13 @@ test('remote verification submits only a visible confirmation button next to use
   assert.equal(vm.runInNewContext(asset('verification-submit.js'),{document:{querySelectorAll:()=>[input]}}),false);
   assert.equal(clicks,1);
 });
+
+
+test('presentation detects a later challenge in branches hidden by film focus and restores the mask',()=>{
+  let hidden=true;
+  const branch={removeAttribute:()=>{hidden=false;},setAttribute:()=>{hidden=true;}};
+  const input={name:'captcha_code',id:'code',getAttribute:()=>'',getBoundingClientRect:()=>({height:hidden?0:40})};
+  const document={querySelectorAll(selector){if(selector==='[data-vp-hidden]')return [branch];if(selector==='input')return [input];return [];}};
+  const result=JSON.parse(vm.runInNewContext(asset('search-state.js'),{document,getComputedStyle:()=>({visibility:'visible'})}));
+  assert.equal(result.stage,'verification');assert.equal(hidden,true);
+});
