@@ -90,13 +90,13 @@ public partial class MainWindow : Window
             Browser.CoreWebView2Controller.AcceleratorKeyPressed += (_, args) =>
             {
                 if (args.KeyEventKind is not (CoreWebView2KeyEventKind.KeyDown or CoreWebView2KeyEventKind.SystemKeyDown)) return;
-                if (args.VirtualKey == 27 && fullscreen) { args.Handled = true; Dispatcher.BeginInvoke(() => LeaveFullscreen()); }
-                else if (args.VirtualKey == 122) { args.Handled = true; Dispatcher.BeginInvoke(() => ToggleFullscreen()); }
+                if (args.VirtualKey == 27 && fullscreen) { args.Handled = true; Dispatcher.InvokeAsync(() => LeaveFullscreen()); }
+                else if (args.VirtualKey == 122) { args.Handled = true; Dispatcher.InvokeAsync(() => ToggleFullscreen()); }
             };
             core.ContextMenuRequested += (_, args) =>
             {
                 var command = environment.CreateContextMenuItem("Pokaż przyciski / wyjdź z pełnego ekranu", null, CoreWebView2ContextMenuItemKind.Command);
-                command.CustomItemSelected += (_, _) => Dispatcher.BeginInvoke(() => LeaveFullscreen());
+                command.CustomItemSelected += (_, _) => Dispatcher.InvokeAsync(() => LeaveFullscreen());
                 args.MenuItems.Insert(0, command);
             };
             var origins = "['https://vider.info','https://www.vider.info','https://vider.pl','https://www.vider.pl','https://freedisc.pl','https://www.freedisc.pl','https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl']";
@@ -335,7 +335,7 @@ public partial class MainWindow : Window
         if (await Browser.ExecuteScriptAsync("!!document.getElementById('vp-focus-style')") != "false") throw new Exception("Page restore failed");
         var state = await Eval("document.body.insertAdjacentHTML('beforeend', '<input name=\"captcha_code\" id=\"challenge\">');" + Script("search-state.js"));
         if (state == null || !state.Contains("verification")) throw new Exception("Challenge detection failed");
-        await Browser.ExecuteScriptAsync("document.getElementById('challenge').remove();document.body.insertAdjacentHTML('beforeend', '<a href=\"https://vider.info/vid/+fabc123\" title=\"Test movie\"><img src=\"https://img.vider.info/poster.png\"></a>');");
+        await Browser.ExecuteScriptAsync("document.getElementById('challenge').remove();document.body.insertAdjacentHTML('beforeend', '<a href=\"https://vider.info/vid/+fabc123\" title=\"Test movie\">Test</a>');");
         var cards = JsonSerializer.Deserialize<List<MovieCard>>(await Eval(Script("search-results.js")) ?? "[]");
         if (cards?.Count != 1 || cards[0].title != "Test movie") throw new Exception("Search extraction failed");
         Render(cards);
