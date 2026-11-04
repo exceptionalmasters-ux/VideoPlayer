@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     private readonly Queue<string> log = new();
     private bool ready, busy, closed, fullscreen, routed, retryUsed;
     private bool searching, returnPending;
-    private DateTime homeReady;
+    private DateTime homeReady, searchDeadline;
     private int epoch, searchTicks;
     private Source source;
     private string? searchTarget, movieTarget;
@@ -149,6 +149,11 @@ public partial class MainWindow : Window
     private async Task Tick()
     {
         if (!ready || busy || closed || mode == Mode.Results) return;
+        if (mode == Mode.Search && searching && DateTime.UtcNow > searchDeadline)
+        {
+            searching = false; ShowBrowser();
+            Status.Text = "Upłynął czas wyszukiwania. Sprawdź stronę i wybierz Sprawdź wyniki lub ponów wyszukiwanie."; return;
+        }
         busy = true; var current = epoch;
         try
         {
@@ -165,7 +170,7 @@ public partial class MainWindow : Window
                 }
                 ShowBrowser();
                 Status.Text = "Serwis wymaga kodu, zgody lub logowania. Dokończ ten krok na stronie; aplikacja sprawdzi ją ponownie.";
-                searchTicks = 0; return;
+                searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); return;
             }
             if (mode == Mode.Search && searching)
             {
@@ -206,7 +211,7 @@ public partial class MainWindow : Window
         var text = Query.Text.Trim();
         if (Policy.Movie(text)) { OpenMovie(text); return; }
         if (text.Length is < 1 or > 120) { Status.Text = "Wpisz tytuł (do 120 znaków) albo link do filmu."; return; }
-        LeaveFullscreen(); ++epoch; mode = Mode.Search; searching = true; routed = false; searchTicks = 0; movieTarget = null; returnPending = false;
+        LeaveFullscreen(); ++epoch; mode = Mode.Search; searching = true; routed = false; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); movieTarget = null; returnPending = false;
         Cards.Children.Clear(); Welcome.Visibility = Visibility.Collapsed;
         PlayerTools.Visibility = Visibility.Collapsed; Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible;
         searchTarget = Policy.Search(source, text);
@@ -307,7 +312,7 @@ public partial class MainWindow : Window
     private void FullscreenClick(object sender, RoutedEventArgs e) => ToggleFullscreen();
     private void ReturnClick(object sender, RoutedEventArgs e) { if (movieTarget != null) OpenMovie(movieTarget); }
     private void ShowPageClick(object sender, RoutedEventArgs e) { if (ready) ShowBrowser(); }
-    private void CheckClick(object sender, RoutedEventArgs e) { if (searchTarget != null && mode != Mode.Movie) { mode = Mode.Search; searching = true; searchTicks = 0; Status.Text = "Ponowny odczyt wyników…"; } }
+    private void CheckClick(object sender, RoutedEventArgs e) { if (searchTarget != null && mode == Mode.Search) { searching = true; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); Status.Text = "Ponowny odczyt wyników…"; } }
     private void ReportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog { FileName = "VideoPlayer-raport.txt", Filter = "Raport tekstowy|*.txt" };
