@@ -86,6 +86,9 @@ public final class MainActivity extends Activity {
     private LocalLibrary library;
     private String launchMovieKey="",launchMovieTitle="",launchMovieThumbnail="";
     private final java.util.Map<String,String> playbackFrames=new java.util.HashMap<>();
+    private String pendingTvTap="";
+    private long pendingTvTapUntil;
+    private int pendingTvTapGeneration;
     private int playerUiFlags;
     private Button fullscreenControls;
 
@@ -272,7 +275,7 @@ public final class MainActivity extends Activity {
                 ++presentationScan;
                 web.getSettings().setUseWideViewPort(true);
                 web.getSettings().setLoadWithOverviewMode(true);
-                ++pageGeneration;playbackFrames.clear();
+                ++pageGeneration;playbackFrames.clear();pendingTvTap="";
                 setCodeVisible(false);
                 diagnostics.add("page.start", url, 0);
                 address.setText(url);
@@ -285,7 +288,7 @@ public final class MainActivity extends Activity {
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
-                if(television){web.evaluateJavascript(script("tv-media.js"),null);if(tvControlsAnchor!=null&&codeRow.getVisibility()!=View.VISIBLE)tvControlsAnchor.requestFocus();}
+                if(television){web.evaluateJavascript(script("tv-play-tap.js")+";"+script("tv-media.js"),null);if(tvControlsAnchor!=null&&codeRow.getVisibility()!=View.VISIBLE)tvControlsAnchor.requestFocus();}
                 inspectVerification(pageGeneration, 0);
                 if (UrlPolicy.isHome(url) && movieNavigation.target() != null) {
                     status.setText("Serwis otworzył stronę główną. Zachowuję wybrany film…");
@@ -377,8 +380,34 @@ public final class MainActivity extends Activity {
         } catch (IOException e) { return "''"; }
     }
     private void installDiagnostics() {
-        if(television&&WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
-            WebViewCompat.addDocumentStartJavaScript(web,script("tv-media.js"),UrlPolicy.mediaOrigins());
+        if(television&&WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)){
+            if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
+                WebViewCompat.addWebMessageListener(web,"vpTvTouch",UrlPolicy.mediaOrigins(),(view,message,origin,mainFrame,reply)->{
+                    if(!mainFrame||!alive||!resumed||pendingTvTap.isEmpty()||pendingTvTapGeneration!=pageGeneration
+                        ||android.os.SystemClock.uptimeMillis()>pendingTvTapUntil||!web.isShown()||customView!=null
+                        ||codeRow.getVisibility()==View.VISIBLE||pointer!=null&&pointer.active()
+                        ||!UrlPolicy.playback(web.getUrl(),movieNavigation.target())
+                        ||message.getType()!=androidx.webkit.WebMessageCompat.TYPE_STRING)return;
+                    try{
+                        android.net.Uri page=android.net.Uri.parse(web.getUrl());
+                        if(!origin.toString().equals(page.getScheme()+"://"+page.getAuthority()))return;
+                        String raw=message.getData();if(raw==null||raw.length()>512)return;
+                        JSONObject tap=new JSONObject(raw);if(!pendingTvTap.equals(tap.optString("id")))return;
+                        double nx=tap.optDouble("x",-1),ny=tap.optDouble("y",-1);
+                        if(!Double.isFinite(nx)||!Double.isFinite(ny)||nx<0||nx>1||ny<0||ny>1)return;
+                        pendingTvTap="";
+                        float x=(float)(nx*web.getWidth()),y=(float)(ny*web.getHeight());
+                        long now=android.os.SystemClock.uptimeMillis();
+                        android.view.MotionEvent down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,x,y,0);
+                        android.view.MotionEvent up=android.view.MotionEvent.obtain(now,now+50,android.view.MotionEvent.ACTION_UP,x,y,0);
+                        down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+                        web.dispatchTouchEvent(down);web.dispatchTouchEvent(up);down.recycle();up.recycle();
+                        diagnostics.add("tv.play_control_tapped",null,0);
+                    }catch(Exception ignored){}
+                });
+            }
+            WebViewCompat.addDocumentStartJavaScript(web,script("tv-play-tap.js")+";"+script("tv-media.js"),UrlPolicy.mediaOrigins());
+        }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, script("frame-fit.js"), UrlPolicy.mediaOrigins());
         }
@@ -523,7 +552,9 @@ public final class MainActivity extends Activity {
         if(!television||!allowed(web.getUrl()))return;
         if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
         diagnostics.add("tv.command."+action,null,0);
-        String command="(function(){return !!(window.__vpTvCommand && window.__vpTvCommand("+JSONObject.quote(action)+"));}())";
+        pendingTvTap=("toggle".equals(action)||"play".equals(action))?java.util.UUID.randomUUID().toString():"";
+        pendingTvTapUntil=android.os.SystemClock.uptimeMillis()+2000;pendingTvTapGeneration=pageGeneration;
+        String command="(function(){return !!(window.__vpTvCommand && window.__vpTvCommand("+JSONObject.quote(action)+","+JSONObject.quote(pendingTvTap)+"));}())";
         web.evaluateJavascript(command,value->{if(!"true".equals(value))toast("Nie znaleziono gotowego odtwarzacza. Wybierz Strona i uruchom film.");});
     }
     private void enterTvFullscreen() {
@@ -756,7 +787,7 @@ public final class MainActivity extends Activity {
         web.saveState(out); super.onSaveInstanceState(out);
     }
     @Override protected void onPause() {
-        resumed = false; if(pointer!=null)pointer.stop(); sessionHandler.removeCallbacksAndMessages(null);
+        resumed = false;pendingTvTap=""; if(pointer!=null)pointer.stop(); sessionHandler.removeCallbacksAndMessages(null);
         web.evaluateJavascript("window.__vpFlushProgress && window.__vpFlushProgress()",null);
         web.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }

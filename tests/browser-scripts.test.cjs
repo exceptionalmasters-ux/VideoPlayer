@@ -382,3 +382,48 @@ test('progress rejects live and invalid times and is idempotent without a native
   const f=progressFixture();f.time(20,Infinity);f.time(-1);f.time(90000);assert.equal(f.messages.length,1);
   assert.doesNotThrow(()=>vm.runInNewContext(asset('playback-progress.js'),{window:{}}));
 });
+
+function playTapFixture(){
+  const messages=[],listeners={};let covered=false;
+  const control={getAttribute:()=> 'Play',getBoundingClientRect:()=>({left:20,top:30,width:20,height:20}),contains:()=>false};
+  const window={innerWidth:100,innerHeight:100,vpTvTouch:{postMessage:v=>messages.push(JSON.parse(v))},addEventListener:(n,f)=>listeners[n]=f};window.parent=window;
+  const document={querySelectorAll:s=>s==='iframe[src]'?[]:[control],elementFromPoint:()=>covered?{}:control};
+  const context={window,document,URL,location:{href:'https://vider.info/vid/+ftest'},getComputedStyle:()=>({display:'block',visibility:'visible'})};
+  vm.runInNewContext(asset('tv-play-tap.js'),context);
+  return {messages,listeners,control,window,document,cover:()=>{covered=true;}};
+}
+test('TV Play requests one scoped native tap at the visible original control, never an overlay',()=>{
+  const f=playTapFixture();assert.equal(f.window.__vpTvTapPlay(''),false);
+  assert.equal(f.window.__vpTvTapPlay('user-ok-nonce'),true);assert.equal(f.messages[0].id,'user-ok-nonce');assert.equal(f.messages[0].x,0.3);assert.equal(f.messages[0].y,0.4);
+  f.cover();assert.equal(f.window.__vpTvTapPlay('another-nonce'),false);assert.equal(f.messages.length,1);
+  f.control.getAttribute=()=> 'Pause';assert.equal(f.window.__vpTvTapPlay('pause-is-not-play'),false);
+});
+test('TV iframe tap coordinates account for borders and scaling, reject unknown frames and occlusion',()=>{
+  const f=playTapFixture();f.window.innerWidth=1000;f.window.innerHeight=1000;
+  const frame={src:'https://vider.pl/embed/video/test',contentWindow:{},offsetWidth:200,offsetHeight:100,clientLeft:2,clientTop:2,clientWidth:196,clientHeight:96,
+    getBoundingClientRect:()=>({left:100,top:150,width:400,height:200})};
+  f.document.querySelectorAll=()=>[frame];f.document.elementFromPoint=()=>frame;
+  const event={origin:'https://vider.pl',source:frame.contentWindow,data:{type:'vp-tv-play-tap',id:'nonce',x:0.5,y:0.25}};
+  f.listeners.message(event);assert.equal(f.messages.length,1);assert.equal(f.messages[0].x,0.3);assert.equal(f.messages[0].y,0.202);
+  f.listeners.message({...event,origin:'https://ads.example'});f.listeners.message({...event,source:{}});
+  f.document.elementFromPoint=()=>({});f.listeners.message(event);assert.equal(f.messages.length,1);
+});
+test('TV Play relay uses the validated parent origin and the API remains the pause path',()=>{
+  const f=playTapFixture(),relayed=[];f.window.parent={postMessage:(data,origin)=>relayed.push({data,origin})};
+  assert.equal(f.window.__vpTvTapPlay('nonce'),false);f.window.__vpTvTouchParent('https://evil.test');assert.equal(f.window.__vpTvTapPlay('nonce'),false);
+  f.window.__vpTvTouchParent('https://vider.pl');assert.equal(f.window.__vpTvTapPlay('nonce'),true);assert.equal(relayed[0].origin,'https://vider.pl');assert.equal(f.messages.length,0);
+  const calls=[];let state='paused';
+  const player={getState:()=>state,play:()=>calls.push('api-play'),pause:()=>calls.push('pause')};
+  const window={jwplayer:()=>player,__vpTvTapPlay:id=>{calls.push(id);return true;},parent:{},addEventListener(){}};
+  vm.runInNewContext(asset('tv-media.js'),{window,document:{head:null,addEventListener(){}}});
+  window.__vpTvCommand('toggle','remote-ok');state='playing';window.__vpTvCommand('toggle','next-ok');
+  assert.deepEqual(calls,['remote-ok','pause']);
+});
+test('TV toggle follows content pause state after a resume seek even when JW state is stale',()=>{
+  const calls=[];const video={currentSrc:'https://stream.vider.info/video/123/v.mp4',paused:true};
+  const player={getState:()=> 'PLAYING',play:()=>calls.push('api-play'),pause:()=>calls.push('pause')};
+  const window={jwplayer:()=>player,__vpTvTapPlay:id=>{calls.push(id);return true;},parent:{},addEventListener(){}};
+  vm.runInNewContext(asset('tv-media.js'),{window,document:{head:null,querySelector:()=>video,addEventListener(){}}});
+  window.__vpTvCommand('toggle','resume-ok');video.paused=false;window.__vpTvCommand('toggle','pause-ok');
+  assert.deepEqual(calls,['resume-ok','pause']);
+});

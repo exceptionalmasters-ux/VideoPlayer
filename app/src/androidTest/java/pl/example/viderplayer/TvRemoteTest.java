@@ -24,7 +24,7 @@ import static org.junit.Assume.assumeTrue;
 /** Runs on an actual Android TV system image. All cards and forms are local fixtures. */
 @RunWith(AndroidJUnit4.class)
 public final class TvRemoteTest {
-    @Before public void televisionOnly(){assumeTrue(TvUi.enabled(InstrumentationRegistry.getInstrumentation().getTargetContext()));}
+    @Before public void televisionOnly(){assumeTrue(TvUi.enabled(InstrumentationRegistry.getInstrumentation().getTargetContext()));InstrumentationRegistry.getInstrumentation().setInTouchMode(false);}
     private static Object field(Object object,String name){
         try{Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);}catch(Exception e){throw new AssertionError(e);}
     }

@@ -4,13 +4,16 @@
   const origins=['https://freedisc.pl','https://www.freedisc.pl','https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl',
     'https://vider.pl','https://www.vider.pl','https://vider.info','https://www.vider.info'];
   const actions=['toggle','play','pause','back','forward'];
-  window.__vpTvCommand=function (action) {
+  window.__vpTvCommand=function (action,requestId) {
     if (!actions.includes(action)) return false;
     // Prefer the original player's API so its advertisement rules remain in effect.
     try {
       const player=typeof window.jwplayer==='function'?window.jwplayer():null;
       if (player && typeof player.getState==='function' && player.getState()) {
-        if(action==='toggle') { if(player.getState()==='playing')player.pause(true);else player.play(true); }
+        const video=document.querySelector?document.querySelector('.jwplayer video.jw-video'):null;
+        const playing=video&&video.currentSrc? !video.paused : String(player.getState()).toLowerCase()==='playing';
+        if((action==='play'||action==='toggle'&&!playing)&&window.__vpTvTapPlay&&window.__vpTvTapPlay(requestId))return true;
+        if(action==='toggle') { if(playing)player.pause(true);else player.play(true); }
         else if(action==='play')player.play(true);
         else if(action==='pause')player.pause(true);
         else player.seek(Math.max(0,player.getPosition()+(action==='back'?-10:10)));
@@ -36,7 +39,7 @@
       try{
         const url=new URL(frame.src,location.href);
         if(origins.includes(url.origin)&&!url.username&&!url.password&&/^\/embed(?:\/|,)/.test(url.pathname)){
-          frame.contentWindow.postMessage({type:'vp-tv-command',action},url.origin);sent=true;
+          frame.contentWindow.postMessage({type:'vp-tv-command',action,requestId},url.origin);sent=true;
         }
       }catch(_){}
     });
@@ -45,7 +48,8 @@
   window.addEventListener('message',function(event){
     if(window.parent===window||event.source!==window.parent||!origins.includes(event.origin)
       ||!event.data||event.data.type!=='vp-tv-command'||!actions.includes(event.data.action))return;
-    window.__vpTvCommand(event.data.action);
+    if(window.__vpTvTouchParent)window.__vpTvTouchParent(event.origin);
+    window.__vpTvCommand(event.data.action,event.data.requestId);
   });
   function outline(){
     if(!document.head||document.getElementById('vp-tv-focus-style'))return;
@@ -55,3 +59,4 @@
   }
   document.addEventListener('DOMContentLoaded',outline);outline();
 }());
+

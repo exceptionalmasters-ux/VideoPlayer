@@ -197,3 +197,7 @@ Widok filmu rozpoznaje również zaufaną stronę embed wybranego filmu i czeka 
 Historia i ulubione zapisują lokalnie pozycję treści co około 5 sekund oraz po pauzie. Kafelek z napisem „Wznów” uruchamia film od zapisanej pozycji po uruchomieniu oryginalnego odtwarzacza. Przytrzymanie kafelka daje opcję „Od początku”. Ostatnie maksymalnie 30 sekund filmu oznacza obejrzaną pozycję i następne otwarcie od początku.
 
 Odczyt używa zdarzeń czasu treści JW Player, pomija zdarzenia reklam i nie usuwa reklam ani ekranów dostępu. Wymagany aktualny Android System WebView. Gdy odtwarzacz nie udostępnia tych zdarzeń, pozycja nie jest zapisywana; nie zgadujemy jej na podstawie reklam. Zmiana wersji filmu o innej długości powoduje odtwarzanie od początku. Historia jest oddzielna na każdym urządzeniu.
+
+### OK / Play na Android TV (0.7.4)
+
+OK uruchamia widoczny, oryginalny przycisk Play odtwarzacza bez włączania kursora, także po wznowieniu zapisanego filmu. Sterowanie pauzą i przewijaniem nadal korzysta z odtwarzacza. Aplikacja uwzględnia położenie i skalowanie osadzonej ramki oraz stan pauzy filmu po przewinięciu. Dotknięcie jest dozwolone tylko przez 2 sekundy po poleceniu OK / Play z pilota, jednorazowo dla tego polecenia. Zasłonięty przycisk nie jest dotykany.

@@ -33,13 +33,14 @@ public final class AutomaticPresentationTest {
         return ActivityScenario.launch(intent);
     }
     private static void load(ActivityScenario<MainActivity> scenario,String body){loadAt(scenario,body,URL);}
-    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination){
+    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination){loadAt(scenario,body,destination,"");}
+    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination,String child){
         final String html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body data-vp-test='presentation'>"+body+"</body></html>";
         scenario.onActivity(activity->{
             WebView web=web(activity);web.stopLoading();
             WebViewClient original=web.getWebViewClient();
             web.setWebViewClient(new WebViewClient(){
-                @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){return new WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(request.isForMainFrame()?html.getBytes(java.nio.charset.StandardCharsets.UTF_8):new byte[0]));}
+                @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){return new WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream((request.isForMainFrame()?html:child).getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap bitmap){original.onPageStarted(view,url,bitmap);}
                 @Override public void onPageFinished(WebView view,String url){original.onPageFinished(view,url);}
             });
@@ -153,6 +154,37 @@ public final class AutomaticPresentationTest {
             end=SystemClock.elapsedRealtime()+5000;
             while(new LocalLibrary(context).find(URL).position!=1260){if(SystemClock.elapsedRealtime()>end)fail("Paused content time was not persisted");SystemClock.sleep(100);}
             assertEquals(1260,new LocalLibrary(context).find(URL).position);
+        }finally{library.remove("history",URL);}
+    }
+
+    @Test public void remoteOkActivatesTrustedPlayInsideEmbedThenPausesAndResumesSavedPosition(){
+        org.junit.Assume.assumeTrue(TvUi.enabled(InstrumentationRegistry.getInstrumentation().getTargetContext()));
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(false);
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        LocalLibrary library=new LocalLibrary(context);library.opened(URL,"Trusted Play fixture","");library.progress(URL,600,7200,false);
+        String child="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>html,body{margin:0;width:100%;height:100%}.jwplayer{position:relative;width:100vw;height:100vh}video{width:100%;height:100%}button{position:absolute;left:40%;top:40%;width:20%;height:20%}</style></head><body><div class='jwplayer'><video class='jw-video'></video><button class='jw-icon-playback' aria-label='Play'>Play</button></div><script>"
+            +"window.events={};window.trustedClicks=0;window.apiPlayCalls=0;window.position=0;window.playState='paused';var button=document.querySelector('button');"
+            +"window.player={getState:function(){return playState},getPosition:function(){return position},on:function(n,f){events[n]=f},play:function(){apiPlayCalls++},pause:function(){playState='paused';button.setAttribute('aria-label','Play');if(events.pause)events.pause()},seek:function(p){position=p;events.time({position:p,duration:7200})}};window.jwplayer=function(){return player};"
+            +"button.addEventListener('click',function(e){if(!e.isTrusted)return;trustedClicks++;playState='playing';button.setAttribute('aria-label','Pause');if(events.time)events.time({position:position,duration:7200})});</script></body></html>";
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            loadAt(scenario,"<div class='video-frame'><iframe style='border:0' src='https://vider.info/embed/video/autotest'></iframe></div>",URL,child);
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"TV player did not enter fullscreen");
+            String frame="document.querySelector('iframe').contentWindow";
+            long end=SystemClock.elapsedRealtime()+10000;
+            while(!"true".equals(eval(scenario,"!!("+frame+".events&&"+frame+".events.time)"))){if(SystemClock.elapsedRealtime()>end)fail("Progress listener missing");SystemClock.sleep(100);}
+            // No native touch is authorized by a page's own message.
+            eval(scenario,"window.vpTvTouch.postMessage(JSON.stringify({type:'vp-tv-play-tap',id:'unsolicited',x:0.5,y:0.5}));true");
+            SystemClock.sleep(200);assertEquals("0",eval(scenario,frame+".trustedClicks"));
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            end=SystemClock.elapsedRealtime()+5000;
+            while(!"true".equals(eval(scenario,frame+".trustedClicks===1&&"+frame+".position===600&&"+frame+".playState==='playing'"))){if(SystemClock.elapsedRealtime()>end)fail("OK did not activate original Play and resume saved position; "+eval(scenario,frame+".trustedClicks"));SystemClock.sleep(100);}
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            end=SystemClock.elapsedRealtime()+5000;
+            while(!"true".equals(eval(scenario,frame+".playState==='paused'"))){if(SystemClock.elapsedRealtime()>end)fail("Second OK did not pause");SystemClock.sleep(100);}
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            end=SystemClock.elapsedRealtime()+5000;
+            while(!"true".equals(eval(scenario,frame+".trustedClicks===2&&"+frame+".position===600&&"+frame+".playState==='playing'"))){if(SystemClock.elapsedRealtime()>end)fail("OK did not resume paused content");SystemClock.sleep(100);}
+            assertEquals("0",eval(scenario,frame+".apiPlayCalls"));
         }finally{library.remove("history",URL);}
     }
 }
