@@ -58,6 +58,17 @@ public final class UrlPolicy {
                 && (host.equals("img.vider.info") || host.equals("img.freedisc.pl") || host.equals("gstatic.com") || host.endsWith(".gstatic.com"));
         } catch (RuntimeException e) { return false; }
     }
+    /** Classifies a page without retaining arbitrary URL contents or search text. */
+    public static String pageKind(String value) {
+        if (value == null || value.isEmpty()) return "missing";
+        if (allowed(value)) return "supported";
+        if (value.equals("about:blank") || value.startsWith("about:blank#")) return "blank";
+        if (value.startsWith("chrome-error://") || value.startsWith("chrome://network-error/")) return "webview_error";
+        try {
+            URI uri = URI.create(value);
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null ? "external_https" : "other";
+        } catch (RuntimeException e) { return "other"; }
+    }
     public static String redact(String value) {
         try {
             URI uri = URI.create(value);

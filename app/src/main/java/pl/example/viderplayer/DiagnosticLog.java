@@ -47,7 +47,8 @@ public final class DiagnosticLog {
     public synchronized String export() {
         try {
             JSONObject report = new JSONObject();
-            report.put("schemaVersion", 1);
+            report.put("schemaVersion", 2);
+            report.put("exportElapsedMs", android.os.SystemClock.elapsedRealtime() - started);
             report.put("appVersion", BuildConfig.VERSION_NAME);
             report.put("androidApi", android.os.Build.VERSION.SDK_INT);
             android.content.pm.PackageInfo pkg = android.webkit.WebView.getCurrentWebViewPackage();

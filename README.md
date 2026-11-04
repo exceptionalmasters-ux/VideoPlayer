@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.0.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.1.
 
 ## Co działa w kodzie
 
@@ -98,3 +98,16 @@ Testy obejmują adres przykładowego filmu, leniwe i CSS-owe miniatury, odrzucan
 Użytkownik potwierdził działanie Vider w 0.4.1. W środowisku deweloperskim strona główna i OpenSearch Freedisc są dostępne, ale podany film i wyszukiwanie zwracają pusty HTTP 404. Dlatego odtworzenie filmu i wyniki Freedisc na żywo wymagają testu na telefonie; sam build ani testy na lokalnych formularzach nie potwierdzają odpowiedzi serwisu. Po instalacji wybierz Freedisc i wyszukaj „Ronin”; można też otworzyć otrzymany link przez **Mam link**. Jeśli nie zadziała, wyeksportuj **Raport** z odpowiedniego ekranu.
 
 Potwierdzona weryfikacja 0.5.0: https://github.com/exceptionalmasters-ux/VideoPlayer/actions/runs/41811053183 — przeszły testy skryptów, testy jednostkowe, Android Lint, kompilacja, weryfikacja podpisu oraz wszystkie trzy testy instrumentacyjne na Androidzie 15 (w tym lokalny formularz Freedisc i zmiana źródła). APK zachowuje podpis 0.4.1. Nie jest to test odtwarzania rzeczywistego filmu Freedisc.
+
+
+## 0.5.1: wyszukiwanie nie pozostaje bez końca w stanie „Szukam”
+
+Raport z telefonu w 0.5.0 pokazał search.start dla Freedisc i search.page z pominiętym adresem, bez odczytu DOM, wyników lub komunikatu błędu. Kod uruchamiał odczyt tylko przy rozpoznanym URL callbacku onPageFinished i nie miał limitu czasu, więc mógł pozostać na „Szukam” bez dalszej pracy.
+
+Każde wyszukiwanie ma teraz niezależny limit 30 sekund aktywnego oczekiwania; kolejne callbacki strony nie resetują tego limitu. Weryfikacja wymagająca działania użytkownika zawiesza limit; powrót z tła uruchamia nowy okres oczekiwania. Błędy sieci, brak wyników i wyczerpanie powrotu ze strony głównej kończą stan wyszukiwania. Zmiana źródła, anulowanie i wyświetlenie kafelków unieważniają stare callbacki i timeouty. Callback strony o nietypowym adresie może rozpocząć odczyt tylko wtedy, gdy bieżący dokument WebView nadal ma dozwolony adres wybranego serwisu i rozpoczęła się jego nawigacja.
+
+Po błędzie lub nierozpoznanym zakończeniu ładowania pojawia się **Pokaż stronę**. To opcjonalny widok diagnostyczny wewnątrz aplikacji. Zachowuje istniejącą stronę, gdy jej adres jest dozwolony, a w przeciwnym przypadku ponawia oryginalny adres wyszukiwania. **Sprawdź** ponawia odczyt kafelków, **Anuluj** wraca do wyszukiwania. Rozpoznana CAPTCHA przechodzi do dotychczasowego ręcznego pola kodu. Nie następuje automatyczne przejście do przeglądarki lub Google.
+
+Raport ma schemaVersion 2 i exportElapsedMs, aby określić czas między zdarzeniami a eksportem. Rozróżnia missing, supported, blank, webview_error, external_https i other bez zapisywania prywatnej treści adresów. Rejestruje początek nawigacji, klasę adresu callbacku i bieżącego dokumentu, zablokowane przekierowania, błędy zasobów, żądanie pobierania i wyczerpanie limitu. Treści wyszukiwania, kodu weryfikacji i cookies nadal nie trafiają do raportu.
+
+Nowy test Androida odtwarza brak callbacku kończącego ładowanie przy lokalnie przechwyconych odpowiedziach: uruchamia wyszukiwanie Freedisc, wywołuje faktycznie zaplanowany callback limitu, sprawdza zakończenie oczekiwania, pokazanie strony, przejście do ręcznej weryfikacji i ignorowanie starego timeoutu po zmianie źródła. Nie wymaga połączenia z serwisem ani czekania 30 sekund w CI. Poprawka usuwa nieskończony stan interfejsu i dostarcza diagnostykę; nie potwierdza działania wyszukiwarki Freedisc na żywo.

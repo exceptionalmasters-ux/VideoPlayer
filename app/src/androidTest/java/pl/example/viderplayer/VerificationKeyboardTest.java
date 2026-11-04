@@ -161,4 +161,63 @@ public final class VerificationKeyboardTest {
             });
         }
     }
+
+    @Test public void missingPageCallbackEndsSearchAndPreviewKeepsManualVerification() throws Exception {
+        try (ActivityScenario<SearchActivity> scenario = ActivityScenario.launch(SearchActivity.class)) {
+            java.util.concurrent.CountDownLatch loaded = new java.util.concurrent.CountDownLatch(1);
+            AtomicReference<Runnable> oldTimeout = new AtomicReference<>();
+            scenario.onActivity(activity -> {
+                selectSource(activity, SiteSource.FREEDISC);
+                WebView web = engine(activity);
+                android.webkit.WebViewClient original = web.getWebViewClient();
+                web.setWebViewClient(new android.webkit.WebViewClient() {
+                    @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, android.webkit.WebResourceRequest request) {
+                        return new android.webkit.WebResourceResponse("text/html", "UTF-8",
+                            new java.io.ByteArrayInputStream(FIXTURE.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    }
+                    @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                        original.onPageStarted(view, url, icon);
+                    }
+                    @Override public void onPageFinished(WebView view, String url) {
+                        // Deliberately omit the callback that normally starts DOM scanning.
+                        // All URL requests are served from the in-memory fixture above.
+                        loaded.countDown();
+                    }
+                });
+                ((android.widget.EditText)field(activity,"query")).setText("Ronin");
+                try {
+                    java.lang.reflect.Method method = SearchActivity.class.getDeclaredMethod("search");
+                    method.setAccessible(true); method.invoke(activity);
+                } catch (Exception e) { throw new AssertionError(e); }
+            });
+            assertTrue("Local search did not load", loaded.await(15, java.util.concurrent.TimeUnit.SECONDS));
+            scenario.onActivity(activity -> {
+                Runnable timeout = (Runnable)field(activity,"searchTimeout");
+                assertNotNull("A search must have a deadline even without page completion", timeout);
+                oldTimeout.set(timeout);
+                // Fire the actual scheduled callback without waiting 30 seconds in CI.
+                timeout.run();
+                assertEquals(false, field(activity,"searchRunning"));
+                assertNull(field(activity,"searchTimeout"));
+                assertTrue(((android.widget.TextView)field(activity,"status")).getText().toString().contains("30 sekund"));
+                Button preview = (Button)field(activity,"previewButton");
+                assertEquals(View.VISIBLE, preview.getVisibility());
+                String report = ((DiagnosticLog)field(activity,"diagnostics")).export();
+                assertTrue(report.contains("search.timeout"));
+                assertFalse(report.contains("Ronin"));
+                preview.performClick();
+                assertNotNull(field(activity,"verificationPanel"));
+            });
+            awaitKeyboard(scenario,true);
+            scenario.onActivity(activity -> {
+                assertNotNull(field(activity,"verificationCode"));
+                assertNull("The deadline must pause while the user solves a challenge", field(activity,"searchTimeout"));
+                selectSource(activity,SiteSource.VIDER);
+                String status = ((android.widget.TextView)field(activity,"status")).getText().toString();
+                oldTimeout.get().run();
+                assertEquals(status,((android.widget.TextView)field(activity,"status")).getText().toString());
+                assertNull(field(activity,"verificationPanel"));
+            });
+        }
+    }
 }

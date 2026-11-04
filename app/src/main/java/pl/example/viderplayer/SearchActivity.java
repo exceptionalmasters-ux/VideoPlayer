@@ -52,6 +52,13 @@ public final class SearchActivity extends Activity {
     private long lastSearchAt;
     private int lastHttpError;
     private Spinner sourcePicker;
+    private Button previewButton;
+    private String verificationStage;
+    private boolean searchRunning;
+    private boolean navigationStarted;
+    private int requestGeneration;
+    private Runnable searchTimeout;
+    private static final long SEARCH_TIMEOUT_MS = 30000;
     private SiteSource selectedSource = SiteSource.VIDER;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -104,6 +111,11 @@ public final class SearchActivity extends Activity {
         addButton(actions, "Mam link", this::pasteLink);
         addButton(actions, "Raport", this::exportReport);
         root.addView(actions);
+        previewButton = new Button(this);
+        previewButton.setText("Pokaż stronę");
+        previewButton.setVisibility(View.GONE);
+        previewButton.setOnClickListener(v -> previewSearch());
+        root.addView(previewButton);
         status = text("Wpisz tytuł. Filmy pokażą się tutaj jako miniatury.", 13, Color.LTGRAY);
         status.setPadding(dp(16), dp(8), dp(16), dp(10));
         root.addView(status);
@@ -132,17 +144,37 @@ public final class SearchActivity extends Activity {
         resultsView.addView(grid);
         workspace.addView(resultsView, new FrameLayout.LayoutParams(-1, -1));
         engine.setWebChromeClient(new WebChromeClient());
+        engine.setDownloadListener((url, userAgent, disposition, mime, length) -> {
+            diagnostics.add("search.download_requested", url, 0);
+            if (searchRunning) failSearch("Serwis zwrócił plik zamiast strony wyników. Wybierz Raport.");
+        });
         engine.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return !"https".equals(request.getUrl().getScheme());
                 String target = request.getUrl().toString();
                 // A background navigation can never open a movie or launch another app.
-                return SiteSource.fromUrl(target) != selectedSource;
+                boolean blocked = SiteSource.fromUrl(target) != selectedSource;
+                if (blocked) {
+                    diagnostics.add("search.navigation_blocked", target, 0);
+                    diagnostics.add("search.blocked_kind." + UrlPolicy.pageKind(target), null, 0);
+                }
+                return blocked;
+            }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                diagnostics.add("search.page_started", url, 0);
+                diagnostics.add("search.started_kind." + UrlPolicy.pageKind(url), null, 0);
+                if (searchRunning && SiteSource.fromUrl(url) == selectedSource) navigationStarted = true;
             }
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 diagnostics.add("search.page", url, 0);
-                if (SiteSource.fromUrl(url) == selectedSource) inspect(++scanToken, 0);
+                diagnostics.add("search.finished_kind." + UrlPolicy.pageKind(url), null, 0);
+                diagnostics.add("search.current_kind." + UrlPolicy.pageKind(view.getUrl()), null, 0);
+                // A stale about:blank completion may arrive after a new load. Inspect the
+                // actual current document only after this request has begun navigating.
+                if ((searchRunning && navigationStarted || verificationPanel != null)
+                        && SiteSource.fromUrl(view.getUrl()) == selectedSource) inspect(++scanToken, 0);
+                else if (searchRunning) previewButton.setVisibility(View.VISIBLE);
             }
             @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, android.webkit.WebResourceResponse response) {
                 if (request.isForMainFrame()) {
@@ -153,8 +185,9 @@ public final class SearchActivity extends Activity {
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     diagnostics.add("search.network_error", request.getUrl().toString(), error.getErrorCode());
-                    status.setText("Nie udało się połączyć. Spróbuj ponownie; raport pomoże ustalić przyczynę.");
-                }
+                    if (searchRunning) failSearch("Nie udało się połączyć z " + selectedSource.label
+                        + ". Wybierz Pokaż stronę lub zapisz Raport.");
+                } else diagnostics.add("search.resource_error", request.getUrl().toString(), error.getErrorCode());
             }
         });
         query.setOnEditorActionListener((view, action, event) -> {
@@ -179,9 +212,10 @@ public final class SearchActivity extends Activity {
     }
     private void selectSource(SiteSource source) {
         if (source == selectedSource) return;
-        ++scanToken;
+        stopSearch();
         engine.stopLoading();
         dismissVerification();
+        previewButton.setVisibility(View.GONE);
         selectedSource = source;
         requestedSearch = null;
         searchReturnUsed = false;
@@ -200,6 +234,9 @@ public final class SearchActivity extends Activity {
         if (lastSearchAt != 0 && now - lastSearchAt < 2000) {
             status.setText("Poczekaj chwilę przed kolejnym wyszukiwaniem."); return;
         }
+        stopSearch();
+        engine.stopLoading();
+        dismissVerification();
         lastSearchAt = now;
         lastHttpError = 0;
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(), 0);
@@ -209,17 +246,69 @@ public final class SearchActivity extends Activity {
         grid.removeAllViews();
         resultsView.setVisibility(View.VISIBLE);
         engine.setVisibility(View.INVISIBLE);
-        status.setText("Szukam filmów…");
-        ++scanToken;
+        status.setText("Szukam w " + selectedSource.label + "…");
+        previewButton.setVisibility(View.GONE);
+        searchRunning = true;
+        navigationStarted = false;
         // Advertised by the site's public /opensearch.xml, not a guessed endpoint.
         requestedSearch = selectedSource.searchUrl(title);
         searchReturnUsed = false;
         diagnostics.clear();
         diagnostics.add("search.start", requestedSearch, 0);
+        diagnostics.add("search.source." + selectedSource.name().toLowerCase(java.util.Locale.ROOT), null, 0);
+        armSearchTimeout();
         engine.loadUrl(requestedSearch);
     }
+    private void stopSearch() {
+        searchRunning = false;
+        ++requestGeneration;
+        ++scanToken;
+        pauseSearchTimeout();
+    }
+    private void pauseSearchTimeout() {
+        if (searchTimeout != null) handler.removeCallbacks(searchTimeout);
+        searchTimeout = null;
+    }
+    private void armSearchTimeout() {
+        if (!active || !searchRunning || searchTimeout != null) return;
+        final int generation = requestGeneration;
+        searchTimeout = () -> {
+            if (!active || !searchRunning || generation != requestGeneration) return;
+            diagnostics.add("search.timeout", engine.getUrl(), engine.getProgress());
+            diagnostics.add("search.timeout_kind." + UrlPolicy.pageKind(engine.getUrl()), null, 0);
+            failSearch("Nie udało się odczytać wyników z " + selectedSource.label
+                + " w ciągu 30 sekund. Wybierz Pokaż stronę lub zapisz Raport.");
+        };
+        handler.postDelayed(searchTimeout, SEARCH_TIMEOUT_MS);
+    }
+    private void failSearch(String message) {
+        stopSearch();
+        engine.stopLoading();
+        dismissVerification();
+        previewButton.setVisibility(requestedSearch == null ? View.GONE : View.VISIBLE);
+        status.setText(message);
+    }
+    private void retryInspection() {
+        if (!searchRunning) { searchRunning = true; ++requestGeneration; }
+        armSearchTimeout();
+        inspect(++scanToken, 0);
+    }
+    private void previewSearch() {
+        if (requestedSearch == null || SiteSource.fromUrl(requestedSearch) != selectedSource) return;
+        diagnostics.add("search.preview_open", engine.getUrl(), 0);
+        searchRunning = true;
+        ++requestGeneration;
+        pauseSearchTimeout();
+        showVerification("preview");
+        armSearchTimeout();
+        if (SiteSource.fromUrl(engine.getUrl()) != selectedSource) {
+            navigationStarted = false;
+            engine.loadUrl(requestedSearch);
+        } else retryInspection();
+    }
     private void inspect(int token, int attempt) {
-        if (!active || token != scanToken || SiteSource.fromUrl(engine.getUrl()) != selectedSource) return;
+        if (!active || token != scanToken || (!searchRunning && verificationPanel == null)
+                || SiteSource.fromUrl(engine.getUrl()) != selectedSource) return;
         engine.evaluateJavascript(asset("search-state.js"), value -> {
             if (!active || token != scanToken) return;
             String stage = "results";
@@ -232,17 +321,19 @@ public final class SearchActivity extends Activity {
                 diagnostics.add("search.verification_required", null,
                     "verification".equals(stage) ? 1 : ("consent".equals(stage) ? 2 : 3));
                 status.setText("Serwis wymaga potwierdzenia. Po nim wrócimy do miniatur.");
+                pauseSearchTimeout();
                 showVerification(stage);
                 if (attempt < 120) handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
                 return;
             }
+            armSearchTimeout();
             if (UrlPolicy.isHome(engine.getUrl()) && requestedSearch != null) {
                 if (!searchReturnUsed) {
                     searchReturnUsed = true;
                     CookieManager.getInstance().flush();
                     diagnostics.add("search.return_after_home", requestedSearch, 0);
                     engine.loadUrl(requestedSearch);
-                } else status.setText("Serwis przekierował wyszukiwanie na stronę główną. Spróbuj ponownie lub wyślij raport.");
+                } else failSearch("Serwis przekierował wyszukiwanie na stronę główną. Wybierz Pokaż stronę lub zapisz Raport.");
                 return;
             }
             readCards(token, attempt);
@@ -280,33 +371,41 @@ public final class SearchActivity extends Activity {
             if (attempt < 12) {
                 handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
             } else {
-                dismissVerification();
                 diagnostics.add("search.empty_or_unrecognized", engine.getUrl(), 0);
-                status.setText(lastHttpError >= 400
+                failSearch(lastHttpError >= 400
                     ? "Serwis odpowiedział błędem HTTP " + lastHttpError + ". Wyślij raport wyszukiwania, jeśli problem się powtarza."
-                    : "Brak odczytanych filmów. Spróbuj krótszego tytułu lub wyślij raport.");
+                    : "Nie odczytano filmów. Wybierz Pokaż stronę, spróbuj krótszego tytułu lub zapisz Raport.");
             }
         });
     }
     private void showVerification(String stage) {
-        if (verificationPanel != null || !active) return;
+        if (!active) return;
+        if (!"preview".equals(stage)) pauseSearchTimeout();
+        if (verificationPanel != null) {
+            if (stage.equals(verificationStage)) return;
+            dismissVerification();
+        }
+        verificationStage = stage;
         android.view.ViewGroup parent = (android.view.ViewGroup) engine.getParent();
         if (parent != null) parent.removeView(engine);
         searchContent.setVisibility(View.GONE);
         verificationPanel = new LinearLayout(this);
         verificationPanel.setOrientation(LinearLayout.VERTICAL);
         verificationPanel.setBackgroundColor(Color.rgb(17, 24, 32));
-        TextView heading = text("Potwierdzenie wyszukiwania", 20, Color.WHITE);
+        TextView heading = text("preview".equals(stage) ? "Strona wyszukiwania · " + selectedSource.label
+            : "Potwierdzenie wyszukiwania", 20, Color.WHITE);
         heading.setPadding(dp(16), dp(12), dp(16), dp(4));
         verificationPanel.addView(heading);
-        TextView explanation = text("verification".equals(stage)
+        TextView explanation = text("preview".equals(stage)
+            ? "To strona zwrócona przez serwis. Jeśli wymaga potwierdzenia, dokończ je tutaj. Sprawdź ponawia odczyt miniatur, Anuluj wraca do wyszukiwania."
+            : "verification".equals(stage)
             ? selectedSource.label + " sprawdza dostęp już przy wyszukiwaniu. Wpisz kod w polu aplikacji, wybierz „Wstaw kod”, potem przycisk na stronie."
             : "Dokończ wymagany przez " + selectedSource.label + " krok. Potem wrócimy do miniatur.", 13, Color.LTGRAY);
         explanation.setPadding(dp(16), 0, dp(16), dp(8));
         verificationPanel.addView(explanation);
         LinearLayout actions = new LinearLayout(this);
         addButton(actions, "Klawiatura", this::showVerificationKeyboard);
-        addButton(actions, "Sprawdź", () -> inspect(++scanToken, 0));
+        addButton(actions, "Sprawdź", this::retryInspection);
         addButton(actions, "Anuluj", this::cancelVerification);
         verificationPanel.addView(engine, new LinearLayout.LayoutParams(-1, 0, 1));
         if ("verification".equals(stage)) {
@@ -389,10 +488,12 @@ public final class SearchActivity extends Activity {
         if (focused && active && verificationCode != null) verificationCode.post(this::showVerificationKeyboard);
     }
     private void cancelVerification() {
-        ++scanToken;
+        stopSearch();
+        engine.stopLoading();
         diagnostics.add("search.verification_cancelled", null, 0);
         dismissVerification();
-        status.setText("Weryfikacja przerwana. Możesz ponowić wyszukiwanie.");
+        previewButton.setVisibility(requestedSearch == null ? View.GONE : View.VISIBLE);
+        status.setText("Widok strony zamknięty. Możesz ponowić wyszukiwanie lub zapisać Raport.");
     }
     private void dismissVerification() {
         if (verificationPanel == null) return;
@@ -401,6 +502,7 @@ public final class SearchActivity extends Activity {
         if (owner != null) owner.removeView(engine);
         screen.removeView(verificationPanel);
         verificationPanel = null;
+        verificationStage = null;
         if (verificationCode != null) verificationCode.setText("");
         verificationCode = null;
         engine.clearFocus();
@@ -415,6 +517,8 @@ public final class SearchActivity extends Activity {
         else super.onBackPressed();
     }
     private void render() {
+        stopSearch();
+        previewButton.setVisibility(View.GONE);
         thumbnails.nextGeneration();
         dismissVerification();
         engine.setVisibility(View.INVISIBLE);
@@ -466,6 +570,8 @@ public final class SearchActivity extends Activity {
         startActivity(new Intent(this, MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)));
     }
     private void exportReport() {
+        diagnostics.add("search.report_export_requested", engine.getUrl(), engine.getProgress());
+        diagnostics.add("search.export_kind." + UrlPolicy.pageKind(engine.getUrl()), null, searchRunning ? 1 : 0);
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/json");
@@ -513,12 +619,16 @@ public final class SearchActivity extends Activity {
         super.onSaveInstanceState(out);
     }
     @Override protected void onPause() {
-        active = false; handler.removeCallbacksAndMessages(null);
+        active = false; pauseSearchTimeout(); handler.removeCallbacksAndMessages(null);
         engine.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }
     @Override protected void onResume() {
         super.onResume(); active = true;
-        if (engine != null) { engine.onResume(); if (results.length() == 0 && engine.getUrl() != null) inspect(++scanToken, 0); }
+        if (engine != null) {
+            engine.onResume();
+            if (searchRunning && verificationPanel == null) armSearchTimeout();
+            if (results.length() == 0 && engine.getUrl() != null) inspect(++scanToken, 0);
+        }
     }
     @Override protected void onDestroy() {
         active = false; handler.removeCallbacksAndMessages(null); thumbnails.close();

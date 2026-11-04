@@ -62,4 +62,16 @@ public final class UrlPolicyTest {
         assertFalse(UrlPolicy.mediaOrigin("https://stream.freedisc.pl:444/embed/video/123"));
         assertFalse(UrlPolicy.mediaOrigin("https://evil.freedisc.pl/"));
     }
+
+    @Test public void classifiesUnusualPagesWithoutExportingTheirContents() {
+        assertEquals("missing", UrlPolicy.pageKind(null));
+        assertEquals("missing", UrlPolicy.pageKind(""));
+        assertEquals("blank", UrlPolicy.pageKind("about:blank"));
+        assertEquals("webview_error", UrlPolicy.pageKind("chrome-error://chromewebdata/"));
+        assertEquals("supported", UrlPolicy.pageKind("https://freedisc.pl/search/all/private-title"));
+        assertEquals("external_https", UrlPolicy.pageKind("https://example.org/private?token=secret"));
+        assertEquals("other", UrlPolicy.pageKind("data:text/html,private"));
+        assertEquals("other", UrlPolicy.pageKind("not a URL"));
+        assertEquals("[omitted]", UrlPolicy.redact("chrome-error://chromewebdata/private"));
+    }
 }
