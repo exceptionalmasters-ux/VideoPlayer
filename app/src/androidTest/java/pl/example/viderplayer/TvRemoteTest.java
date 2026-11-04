@@ -64,15 +64,22 @@ public final class TvRemoteTest {
             key(KeyEvent.KEYCODE_DPAD_DOWN);
             scenario.onActivity(activity->assertTrue(((GridLayout)field(activity,"grid")).getChildAt(5).hasFocus()));
             key(KeyEvent.KEYCODE_DPAD_UP);key(KeyEvent.KEYCODE_DPAD_LEFT);key(KeyEvent.KEYCODE_DPAD_UP);
-            scenario.onActivity(activity->{assertTrue("UP from the first row must focus the search field",((View)field(activity,"query")).hasFocus());});
+            scenario.onActivity(activity->{
+                android.widget.EditText query=(android.widget.EditText)field(activity,"query");
+                assertTrue("UP from the first row must focus the search field",query.hasFocus());
+                assertFalse("Focusing the title must not open the TV keyboard without OK",query.getShowSoftInputOnFocus());
+            });
             key(KeyEvent.KEYCODE_DPAD_DOWN);key(KeyEvent.KEYCODE_DPAD_RIGHT);
-            scenario.onActivity(activity->assertTrue("RIGHT after returning from search must select the second card",((GridLayout)field(activity,"grid")).getChildAt(1).hasFocus()));
+            android.graphics.Bitmap screenshot=instrumentation.getUiAutomation().takeScreenshot();
+            if(screenshot!=null){try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null),"tv-results.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}
+            scenario.onActivity(activity->{
+                View focus=activity.getCurrentFocus();
+                assertTrue("RIGHT after returning from search must select the second card; focus="+(focus==null?"none":focus.getClass().getName()+" "+focus.getContentDescription()),((GridLayout)field(activity,"grid")).getChildAt(1).hasFocus());
+            });
             key(KeyEvent.KEYCODE_DPAD_CENTER);
             scenario.onActivity(activity->assertEquals("OK must activate the selected card",1,field(activity,"selectedResultIndex")));
             assertNotNull("OK must request the movie Activity",opened.get());
             assertEquals("https://freedisc.pl/tester,f-101,test-mp4",opened.get().getDataString());
-            android.graphics.Bitmap screenshot=instrumentation.getUiAutomation().takeScreenshot();
-            if(screenshot!=null){try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null),"tv-results.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}
         }finally{instrumentation.removeMonitor(monitor);}
     }
     private static Button find(View view,String text){
