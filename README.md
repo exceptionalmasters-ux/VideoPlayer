@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.2.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.3.
 
 ## Co działa w kodzie
 
@@ -122,3 +122,14 @@ Tylko Freedisc korzysta teraz z desktopowego User-Agent, zachowującego wersję 
 Pierwsze przekierowanie do dokładnego `m.freedisc.pl` jest anulowane i może jednorazowo wznowić stronę desktopową HTTPS. Kolejne kończy się komunikatem; nie ma pętli ani pozwolenia na otwieranie HTTP. Klasy raportu rozróżniają teraz również `freedisc_mobile` i `insecure_http`. Odtwarzacz filmu również wybiera desktopowy identyfikator dla Freedisc. Cookies i normalne wymagania weryfikacji serwisu pozostają obsługiwane tak jak wcześniej.
 
 Testy sprawdzają rozdzielenie User-Agent obu źródeł, dokładne rozpoznawanie hosta mobilnego, walidację celu i gotowość routera oraz pełną ścieżkę na emulatorze: lokalnie przechwycona strona główna -> router -> natywne kafelki. Test nie wysyła zapytań do rzeczywistego Freedisc. Nadal obowiązuje limit czasu i opcjonalny przycisk Pokaż stronę. Działanie wyników i odtwarzania na żywo należy potwierdzić na telefonie.
+
+
+## 0.5.3: dopasowanie filmu i powiększony formularz kodu
+
+Użytkownik potwierdził działanie wyszukiwania i odtwarzania Freedisc w 0.5.2, lecz zgłosił przycięcie filmu i zbyt mały formularz kodu. Widok filmu resetuje teraz desktopową szerokość viewportu i minimalne szerokości otoczenia odtwarzacza, a wideo otrzymuje object-fit:contain. Znana ramka embed ma pierwszeństwo przed przypadkowym elementem video reklamy na stronie. Istniejąca ramka i odtwarzacz nie są przenoszone ani przeładowywane.
+
+Dla znanych domen odtwarzacza skrypt startowy wewnątrz ramki odbiera komunikat dopasowania tylko od własnego rodzica z dokładnej dozwolonej domeny HTTPS. Dopasowuje viewport, kontener odtwarzacza, HTML5 video i rozmiar JW Player do ramki. Reaguje na zmianę wymiarów i dynamiczne dodanie odtwarzacza. Nie ukrywa reklam i kontrolek wewnątrz odtwarzacza. Wyjście z widoku filmu usuwa dodane style i przywraca oryginalny viewport. Obsługa między domenami wymaga funkcji DOCUMENT_START_SCRIPT dostępnej w nowoczesnym Android System WebView.
+
+Rozpoznany formularz CAPTCHA jest dopasowywany do szerokości telefonu: resetuje desktopowe marginesy i minimalne szerokości, powiększa pole i przycisk zatwierdzania oraz przewija formularz do widoku. Wyszukiwarka zachowuje natywne pole kodu i fokus klawiatury; takie pole jest teraz dostępne także przy CAPTCHA na głównej stronie filmu. Wpisanie kodu pozostaje ręczne, przycisk Wstaw kod kopiuje odpowiedź do istniejącego formularza, a zatwierdzenie odbywa się przyciskiem serwisu. Wpisany tekst i sesja nie trafiają do raportu.
+
+Nowe testy rzeczywistego WebView używają lokalnej strony i przechwyconej ramki o początkowej szerokości 1000 px. Sprawdzają rozmiar ramki i wideo, object-fit:contain, przywrócenie viewportu bez ponownego ładowania oraz czytelny formularz bez utraty wpisanej wartości. Dotychczasowe testy klawiatury i kafelków pozostają w CI. Konkretne układy strony i reklam na telefonie wymagają sprawdzenia po aktualizacji.

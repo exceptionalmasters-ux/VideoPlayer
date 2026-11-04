@@ -61,6 +61,8 @@ public final class MainActivity extends Activity {
     private int pageGeneration;
     private String defaultUserAgent;
     private boolean mobileRedirectRetried;
+    private LinearLayout codeRow;
+    private EditText codeInput;
 
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -120,6 +122,16 @@ public final class MainActivity extends Activity {
         content.addView(status);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         content.addView(progress, new LinearLayout.LayoutParams(-1, dp(3)));
+        codeRow = new LinearLayout(this);
+        codeRow.setVisibility(View.GONE);
+        codeInput = new EditText(this);
+        codeInput.setHint("Kod z obrazka — wpisz tutaj");
+        codeInput.setSingleLine(true);
+        codeInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        codeInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
+        codeRow.addView(codeInput, new LinearLayout.LayoutParams(0, dp(56), 1));
+        button(codeRow,"Wstaw kod",this::insertVerificationCode);
+        content.addView(codeRow);
         web = new WebView(this);
         content.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         WebSettings settings = web.getSettings();
@@ -135,6 +147,8 @@ public final class MainActivity extends Activity {
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         installDiagnostics();
@@ -184,6 +198,7 @@ public final class MainActivity extends Activity {
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 loadFailed = false;
                 ++pageGeneration;
+                setCodeVisible(false);
                 diagnostics.add("page.start", url, 0);
                 address.setText(url);
                 status.setText("Ładowanie…");
@@ -194,6 +209,7 @@ public final class MainActivity extends Activity {
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
+                inspectVerification(pageGeneration, 0);
                 if (UrlPolicy.isHome(url) && movieNavigation.target() != null) {
                     status.setText("Serwis otworzył stronę główną. Zachowuję wybrany film…");
                     returnToMovie(pageGeneration, 0);
@@ -283,6 +299,9 @@ public final class MainActivity extends Activity {
         } catch (IOException e) { return "''"; }
     }
     private void installDiagnostics() {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(web, script("frame-fit.js"), UrlPolicy.mediaOrigins());
+        }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             Set<String> origins = UrlPolicy.mediaOrigins();
@@ -299,14 +318,56 @@ public final class MainActivity extends Activity {
             toast("Zaktualizuj Android System WebView, aby włączyć diagnostykę filmu.");
         }
     }
+    private void inspectVerification(int generation, int attempt) {
+        if (!alive || !resumed || generation != pageGeneration || !allowed(web.getUrl())) return;
+        web.evaluateJavascript(script("verification-layout.js"), value -> {
+            if (!alive || !resumed || generation != pageGeneration) return;
+            boolean visible = "true".equals(value);
+            setCodeVisible(visible);
+            if (visible || attempt < 10) sessionHandler.postDelayed(() -> inspectVerification(generation, attempt + 1), 1500);
+        });
+    }
+    private void setCodeVisible(boolean visible) {
+        if (visible == (codeRow.getVisibility() == View.VISIBLE)) return;
+        codeRow.setVisibility(visible ? View.VISIBLE : View.GONE);
+        web.getSettings().setUseWideViewPort(!visible);
+        web.getSettings().setLoadWithOverviewMode(!visible);
+        if (visible) {
+            diagnostics.add("verification.open", web.getUrl(), 0);
+            codeInput.requestFocus();
+            codeInput.post(() -> {
+                if (alive && codeRow.getVisibility() == View.VISIBLE)
+                    ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(codeInput,InputMethodManager.SHOW_IMPLICIT);
+            });
+        } else {
+            ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(codeInput.getWindowToken(),0);
+            codeInput.setText("");
+        }
+    }
+    private void insertVerificationCode() {
+        if (!allowed(web.getUrl()) || codeRow.getVisibility() != View.VISIBLE) return;
+        String code = codeInput.getText().toString();
+        if (code.isEmpty()) { codeInput.setError("Wpisz kod z obrazka"); return; }
+        web.evaluateJavascript(script("verification-fill.js").replace("__VP_MANUAL_CODE__",JSONObject.quote(code)), value -> {
+            if ("true".equals(value)) {
+                ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(codeInput.getWindowToken(),0);
+                toast("Kod wstawiony. Użyj przycisku na stronie, aby go zatwierdzić.");
+            } else toast("Nie znaleziono pola kodu na stronie.");
+        });
+    }
     private void focusPlayer() {
         if (!allowed(web.getUrl())) return;
+        if (codeRow.getVisibility() == View.VISIBLE) { toast("Najpierw dokończ weryfikację kodu."); return; }
         web.evaluateJavascript(script("focus-player.js"), result -> {
             if ("\"missing\"".equals(result)) toast("Nie znaleziono odtwarzacza. Otwórz pełną stronę filmu i uruchom odtwarzanie.");
             else if ("\"player\"".equals(result)) {
+                web.getSettings().setUseWideViewPort(false);
+                web.getSettings().setLoadWithOverviewMode(false);
                 diagnostics.add("focus.enter", web.getUrl(), 0);
                 status.setText("Widok odtwarzacza • reklamy wewnątrz ramki pozostają aktywne");
             } else if ("\"page\"".equals(result)) {
+                web.getSettings().setUseWideViewPort(true);
+                web.getSettings().setLoadWithOverviewMode(true);
                 diagnostics.add("focus.exit", web.getUrl(), 0);
                 status.setText("Pełna strona");
             }
@@ -444,6 +505,7 @@ public final class MainActivity extends Activity {
         super.onResume(); resumed = true;
         if (web != null) {
             web.onResume();
+            inspectVerification(pageGeneration, 0);
             if (UrlPolicy.isHome(web.getUrl()) && movieNavigation.target() != null) returnToMovie(pageGeneration, 0);
         }
     }

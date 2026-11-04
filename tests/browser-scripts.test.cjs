@@ -37,7 +37,8 @@ test('focus preserves the loaded frame and restores the full page', () => {
     const attributes = new Set();
     const el = {tagName, children: [], parentElement: null,
       setAttribute: name => attributes.add(name), removeAttribute: name => attributes.delete(name),
-      hasAttribute: name => attributes.has(name),
+      hasAttribute: name => attributes.has(name), getAttribute: () => null,
+      addEventListener(){}, removeEventListener(){}, contentWindow:{postMessage(){}},
       appendChild(child) { this.children.push(child); child.parentElement = this; },
       remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(n => n !== this); }};
     nodes.push(el); return el;
@@ -46,12 +47,14 @@ test('focus preserves the loaded frame and restores the full page', () => {
   const comments = element('DIV'); const player = element('DIV'); const frame = element('IFRAME');
   body.appendChild(outer); outer.appendChild(player); outer.appendChild(comments); player.appendChild(frame);
   player.querySelector = () => frame;
+  player.querySelectorAll = () => [frame];
   const document = {body, head,
     getElementById: id => head.children.find(n => n.id === id),
-    querySelector: () => player,
+    querySelector: selector => selector.startsWith('meta') ? null : player,
     querySelectorAll: () => nodes.filter(n => ['data-vp-hidden','data-vp-parent','data-vp-player'].some(k => n.hasAttribute(k))),
     createElement: element};
-  const context = {document};
+  const context = {document,window:{},URL,location:{href:'https://vider.pl/vid/+fexample'},
+    MutationObserver:class {observe(){} disconnect(){}}};
   assert.equal(vm.runInNewContext(asset('focus-player.js'), context), 'player');
   assert.equal(comments.hasAttribute('data-vp-hidden'), true);
   assert.equal(player.children[0], frame);
@@ -224,7 +227,8 @@ test('focus selects an existing Freedisc embed frame and preserves it on restore
   function element(tagName) {
     const attrs=new Set();
     return {tagName,children:[],parentElement:null,querySelector:()=>null,
-      setAttribute:k=>attrs.add(k),removeAttribute:k=>attrs.delete(k),hasAttribute:k=>attrs.has(k),
+      setAttribute:k=>attrs.add(k),removeAttribute:k=>attrs.delete(k),hasAttribute:k=>attrs.has(k),getAttribute:()=>null,
+      addEventListener(){},removeEventListener(){},contentWindow:{postMessage(){}},
       appendChild(n){this.children.push(n);n.parentElement=this;},
       remove(){this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}};
   }
@@ -235,7 +239,8 @@ test('focus selects an existing Freedisc embed frame and preserves it on restore
   const document={body,head,createElement:element,querySelector:()=>null,
     getElementById:id=>head.children.find(n=>n.id===id),
     querySelectorAll:s=>s==='iframe[src]'?[frame]:nodes};
-  const context={document,URL,location:{href:'https://freedisc.pl/user,f-19724546,ronin-mp4'}};
+  const context={document,window:{},URL,location:{href:'https://freedisc.pl/user,f-19724546,ronin-mp4'},
+    MutationObserver:class {observe(){} disconnect(){}}};
   assert.equal(vm.runInNewContext(asset('focus-player.js'),context),'player');
   assert.equal(frame.hasAttribute('data-vp-player'),true);
   assert.equal(comments.hasAttribute('data-vp-hidden'),true);
@@ -272,4 +277,18 @@ test('Freedisc router never routes unsafe destinations or arbitrary paths',()=>{
     assert.equal(value.result,'invalid',target);
     assert.equal(value.calls.length,0);
   }
+});
+
+
+test('frame sizing ignores messages from unrelated origins or windows',()=>{
+  const handlers={}; const parent={};
+  const window={parent,addEventListener:(name,callback)=>{handlers[name]=callback;}};
+  const context={window,document:{},MutationObserver:class{constructor(){throw Error('Unexpected DOM mutation');}}};
+  vm.runInNewContext(asset('frame-fit.js'),context);
+  for(const event of [
+    {source:parent,origin:'https://evil.test',data:{type:'vp-frame-fit',enabled:true}},
+    {source:{},origin:'https://freedisc.pl',data:{type:'vp-frame-fit',enabled:true}},
+    {source:parent,origin:'https://freedisc.pl',data:{type:'other',enabled:true}},
+    {source:parent,origin:'https://freedisc.pl',data:{type:'vp-frame-fit',enabled:'true'}}
+  ]) assert.doesNotThrow(()=>handlers.message(event));
 });

@@ -139,6 +139,8 @@ public final class SearchActivity extends Activity {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
         settings.setSupportMultipleWindows(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         CookieManager.getInstance().setAcceptCookie(true);
@@ -503,7 +505,12 @@ public final class SearchActivity extends Activity {
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         engine.requestFocus();
         diagnostics.add("search.verification_open", null, 0);
-        if ("verification".equals(stage)) engine.postDelayed(this::showVerificationKeyboard, 250);
+        if ("verification".equals(stage)) {
+            engine.getSettings().setUseWideViewPort(false);
+            engine.getSettings().setLoadWithOverviewMode(false);
+            engine.evaluateJavascript(asset("verification-layout.js"), null);
+            engine.postDelayed(this::showVerificationKeyboard, 250);
+        }
     }
     private void showVerificationKeyboard() {
         if (!active || verificationPanel == null || !UrlPolicy.allowed(engine.getUrl())) return;
@@ -568,6 +575,7 @@ public final class SearchActivity extends Activity {
         screen.removeView(verificationPanel);
         verificationPanel = null;
         verificationStage = null;
+        configureSource();
         if (verificationCode != null) verificationCode.setText("");
         verificationCode = null;
         engine.clearFocus();
