@@ -252,7 +252,10 @@ public final class SearchActivity extends Activity {
             }
         });
         query.setOnEditorActionListener((view, action, event) -> {
-            if (action == EditorInfo.IME_ACTION_SEARCH || television&&(action==EditorInfo.IME_ACTION_DONE||action==EditorInfo.IME_ACTION_GO||event!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_ENTER&&event.getAction()==android.view.KeyEvent.ACTION_UP)) { search(); return true; }
+            if(television)diagnostics.add("search.editor_action",null,action);
+            boolean enter=event!=null&&(event.getKeyCode()==android.view.KeyEvent.KEYCODE_ENTER||event.getKeyCode()==android.view.KeyEvent.KEYCODE_NUMPAD_ENTER||event.getKeyCode()==android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            // TV keyboards also report IME_NULL/NONE or a DOWN event for their confirmation key.
+            if(action==EditorInfo.IME_ACTION_SEARCH||television&&(event==null||enter)){search();return true;}
             return false;
         });
         sourcePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -356,7 +359,7 @@ public final class SearchActivity extends Activity {
         if (title.isEmpty()) { query.setError("Wpisz tytuł filmu"); return; }
         long now = android.os.SystemClock.elapsedRealtime();
         if (lastSearchAt != 0 && now - lastSearchAt < 2000) {
-            status.setText("Poczekaj chwilę przed kolejnym wyszukiwaniem."); return;
+            if(!searchRunning)status.setText("Poczekaj chwilę przed kolejnym wyszukiwaniem."); return;
         }
         collection="results";clearCollection.setVisibility(View.GONE);
         stopSearch();

@@ -41,7 +41,7 @@ public final class TvRemoteTest {
         java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
         long deadline=android.os.SystemClock.elapsedRealtime()+10000;
         do{scenario.onActivity(activity->ready.set(activity.hasWindowFocus()&&condition.test(activity)));if(ready.get())return;android.os.SystemClock.sleep(100);}while(android.os.SystemClock.elapsedRealtime()<deadline);
-        scenario.onActivity(activity->{View focus=activity.getCurrentFocus();fail(message+"; windowFocus="+activity.hasWindowFocus()+"; focus="+(focus==null?"none":focus.getClass().getName()+" "+focus.getContentDescription()));});
+        scenario.onActivity(activity->{View focus=activity.getCurrentFocus();fail(message+"; windowFocus="+activity.hasWindowFocus()+"; focus="+(focus==null?"none":focus.getClass().getName()+" "+focus.getContentDescription())+"; diagnostics="+((DiagnosticLog)field(activity,"diagnostics")).export());});
     }
     private static void cardFocus(ActivityScenario<SearchActivity> scenario,int index){await(scenario,activity->((GridLayout)field(activity,"grid")).getChildAt(index).hasFocus(),"Expected focus on card "+index);}
     private static void key(int value){InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(value);InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
