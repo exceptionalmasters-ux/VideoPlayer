@@ -31,6 +31,12 @@ public final class TvRemoteTest {
     private static void call(Object object,String method){
         try{Method m=object.getClass().getDeclaredMethod(method);m.setAccessible(true);m.invoke(object);}catch(Exception e){throw new AssertionError(e);}
     }
+    private static void shell(Instrumentation instrumentation,String command) throws Exception {
+        try(android.os.ParcelFileDescriptor descriptor=instrumentation.getUiAutomation().executeShellCommand(command);
+            java.io.InputStream stream=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)){
+            byte[] buffer=new byte[1024];while(stream.read(buffer)!=-1){ }
+        }
+    }
     private static void key(int value){InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(value);InstrumentationRegistry.getInstrumentation().waitForIdleSync();}
     @Test public void tvLauncherAndDpadReachCardsAndOpenSelection() throws Exception {
         Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
@@ -70,8 +76,10 @@ public final class TvRemoteTest {
                 assertFalse("Focusing the title must not open the TV keyboard without OK",query.getShowSoftInputOnFocus());
             });
             key(KeyEvent.KEYCODE_DPAD_DOWN);key(KeyEvent.KEYCODE_DPAD_RIGHT);
-            android.graphics.Bitmap screenshot=instrumentation.getUiAutomation().takeScreenshot();
-            if(screenshot!=null){try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null),"tv-results.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}
+            // Gradle removes the test application's private files after instrumentation.
+            // A shell-owned public fixture screenshot survives that cleanup for CI review.
+            shell(instrumentation,"mkdir -p /sdcard/Download");
+            shell(instrumentation,"screencap -p /sdcard/Download/videoplayer-tv.png");
             scenario.onActivity(activity->{
                 View focus=activity.getCurrentFocus();
                 assertTrue("RIGHT after returning from search must select the second card; focus="+(focus==null?"none":focus.getClass().getName()+" "+focus.getContentDescription()),((GridLayout)field(activity,"grid")).getChildAt(1).hasFocus());
