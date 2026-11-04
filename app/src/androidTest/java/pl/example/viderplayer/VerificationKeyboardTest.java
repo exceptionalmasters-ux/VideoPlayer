@@ -34,6 +34,22 @@ public final class VerificationKeyboardTest {
     private static void loadFixture(ActivityScenario<SearchActivity> scenario) {
         scenario.onActivity(activity -> engine(activity).loadDataWithBaseURL(
             "https://vider.info/search/all/local-input-test", FIXTURE, "text/html", "UTF-8", null));
+        AtomicBoolean loaded = new AtomicBoolean();
+        long deadline = SystemClock.elapsedRealtime() + 15000;
+        while (!loaded.get() && SystemClock.elapsedRealtime() < deadline) {
+            scenario.onActivity(activity -> engine(activity).evaluateJavascript(
+                "document.getElementById('code') !== null", value -> loaded.set("true".equals(value))));
+            SystemClock.sleep(100);
+        }
+        assertTrue("Local input fixture did not load", loaded.get());
+        // Test the same screen transition as a detected server challenge. Hidden WebView
+        // layout is not guaranteed for loadDataWithBaseURL, unlike a real page navigation.
+        scenario.onActivity(activity -> {
+            try {
+                java.lang.reflect.Method method = SearchActivity.class.getDeclaredMethod("showVerification", String.class);
+                method.setAccessible(true); method.invoke(activity, "verification");
+            } catch (Exception e) { throw new AssertionError(e); }
+        });
     }
     private static void awaitKeyboard(ActivityScenario<SearchActivity> scenario, boolean expected) {
         long deadline = SystemClock.elapsedRealtime() + 20000;
@@ -47,7 +63,18 @@ public final class VerificationKeyboardTest {
             if (seen.get()) return;
             SystemClock.sleep(100);
         }
-        fail("Keyboard visibility did not become " + expected + " on the verification screen");
+        AtomicReference<String> details = new AtomicReference<>();
+        scenario.onActivity(activity -> {
+            WebView web = engine(activity);
+            details.set("panel=" + (field(activity,"verificationPanel") != null)
+                + ", viewFocus=" + web.hasFocus() + ", windowFocus=" + web.hasWindowFocus()
+                + ", flags=" + activity.getWindow().getAttributes().flags
+                + ", url=" + web.getUrl());
+            web.evaluateJavascript("JSON.stringify({active:document.activeElement&&document.activeElement.id,height:innerHeight,inputHeight:document.getElementById('code')&&document.getElementById('code').getBoundingClientRect().height})",
+                value -> android.util.Log.i("KeyboardTest", "Fixture editor state: " + value));
+            android.util.Log.i("KeyboardTest", ((DiagnosticLog)field(activity,"diagnostics")).export());
+        });
+        fail("Keyboard visibility did not become " + expected + ": " + details.get());
     }
     private static Button findButton(View root, String text) {
         if (root instanceof Button && text.contentEquals(((Button) root).getText())) return (Button) root;
