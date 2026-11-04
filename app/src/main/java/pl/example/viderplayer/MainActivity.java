@@ -77,6 +77,7 @@ public final class MainActivity extends Activity {
         for(int i=0;i<codeRow.getChildCount();i++)code.add(codeRow.getChildAt(i));
         java.util.List<java.util.List<View>> rows=TvFocus.connect(java.util.Arrays.asList(toolbar,code));
         if(codeRow.getVisibility()!=View.VISIBLE)for(View v:toolbar)v.setNextFocusDownId(web.getId());
+        else if(codeRow.getChildCount()>1)codeInput.setNextFocusDownId(codeRow.getChildAt(codeRow.getChildCount()-1).getId());
     }
     private final java.util.Map<View,Integer> playerChrome=new java.util.IdentityHashMap<>();
     private final PresentationPolicy presentation=new PresentationPolicy();

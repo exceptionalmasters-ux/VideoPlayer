@@ -299,11 +299,6 @@ public final class SearchActivity extends Activity {
     private void togglePointer(){
         if(pointer!=null){boolean on=pointer.toggle();Toast.makeText(this,on?"Kursor: strzałki przesuwają · OK klika · Wstecz wyłącza":"Kursor wyłączony",Toast.LENGTH_SHORT).show();}
     }
-    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event){
-        if(pointer!=null&&pointer.key(event))return true;
-        if(television&&verificationPanel!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_MENU){if(event.getAction()==android.view.KeyEvent.ACTION_UP)togglePointer();return true;}
-        return super.dispatchKeyEvent(event);
-    }
     private void showCollection(String selected){
         if("results".equals(collection))searchResults=results;
         collection="history".equals(selected)||"favorites".equals(selected)?selected:"results";
@@ -698,6 +693,8 @@ public final class SearchActivity extends Activity {
         CookieManager.getInstance().flush();
     }
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if(pointer!=null&&pointer.key(event))return true;
+        if(television&&verificationPanel!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_MENU){if(event.getAction()==android.view.KeyEvent.ACTION_UP)togglePointer();return true;}
         if(television&&verificationPanel!=null&&engine.hasFocus()){
             int key=event.getKeyCode();
             if(key==android.view.KeyEvent.KEYCODE_DPAD_UP||key==android.view.KeyEvent.KEYCODE_DPAD_LEFT
