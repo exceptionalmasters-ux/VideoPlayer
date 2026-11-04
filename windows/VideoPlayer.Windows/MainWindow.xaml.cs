@@ -392,9 +392,17 @@ public partial class MainWindow : Window
     {
         timer.Stop(); mode = Mode.Movie; ShowBrowser();
         var completion = new TaskCompletionSource();
-        EventHandler<CoreWebView2NavigationCompletedEventArgs> handler = (_, _) => completion.TrySetResult();
+        const string fixtureUrl="https://vider.info/vid/+fdesktoptest";
+        var html="<!doctype html><html><body data-vp-smoke='ready'><div class='video-frame'><video controls></video></div><p id='comments'>Comments</p></body></html>";
+        Browser.CoreWebView2.AddWebResourceRequestedFilter(fixtureUrl,CoreWebView2WebResourceContext.Document);
+        Browser.CoreWebView2.WebResourceRequested+=(_,args)=>
+        {
+            if(args.Request.Uri==fixtureUrl)args.Response=Browser.CoreWebView2.Environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(html)),200,"OK","Content-Type: text/html; charset=utf-8");
+        };
+        EventHandler<CoreWebView2NavigationCompletedEventArgs> handler = (_,args) =>
+        {if(args.IsSuccess)completion.TrySetResult();else completion.TrySetException(new Exception("Fixture navigation failed: "+args.WebErrorStatus));};
         Browser.CoreWebView2.NavigationCompleted += handler;
-        Browser.NavigateToString("<!doctype html><html><body data-vp-smoke='ready'><div class='video-frame'><video controls></video></div><p id='comments'>Comments</p></body></html>");
+        Browser.CoreWebView2.Navigate(fixtureUrl);
         await completion.Task.WaitAsync(TimeSpan.FromSeconds(20));
         Browser.CoreWebView2.NavigationCompleted -= handler;
         var deadline=DateTime.UtcNow.AddSeconds(20);
@@ -414,6 +422,7 @@ public partial class MainWindow : Window
         if (cards?.Count != 1 || cards[0].title != "Test movie") throw new Exception("Search extraction failed");
         Render(cards);
         if (Cards.Children.Count != 1) throw new Exception("Native cards failed");
+        CollectionAction(()=>collections?.Clear("history"));
         CollectionAction(()=>collections?.Opened(cards[0]));
         CollectionAction(()=>collections?.Toggle(cards[0]));
         ShowCollection("history");if(Cards.Children.Count!=1)throw new Exception("History tiles failed");

@@ -33,15 +33,16 @@ public final class AutomaticPresentationTest {
         return ActivityScenario.launch(intent);
     }
     private static void load(ActivityScenario<MainActivity> scenario,String body){
+        final String html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body data-vp-test='presentation'>"+body+"</body></html>";
         scenario.onActivity(activity->{
             WebView web=web(activity);web.stopLoading();
             WebViewClient original=web.getWebViewClient();
             web.setWebViewClient(new WebViewClient(){
-                @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){return new WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));}
+                @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){return new WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(request.isForMainFrame()?html.getBytes(java.nio.charset.StandardCharsets.UTF_8):new byte[0]));}
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap bitmap){original.onPageStarted(view,url,bitmap);}
                 @Override public void onPageFinished(WebView view,String url){original.onPageFinished(view,url);}
             });
-            web.loadDataWithBaseURL(URL,"<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body data-vp-test='presentation'>"+body+"</body></html>","text/html","UTF-8",URL);
+            web.loadUrl(URL+"?fixture="+java.util.UUID.randomUUID());
         });
         long loaded=SystemClock.elapsedRealtime()+15000;
         while(!"true".equals(eval(scenario,"!!document.querySelector('body[data-vp-test=presentation]')"))){
