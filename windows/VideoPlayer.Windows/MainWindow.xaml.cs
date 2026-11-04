@@ -24,6 +24,10 @@ public partial class MainWindow : Window
     private DateTime homeReady, searchDeadline;
     private int epoch, searchTicks;
     private Source source;
+    private MovieCollections? collections;
+    private string collection="results";
+    private List<MovieCard> searchCards=[];
+    private MovieCard? currentMovie;
     private string? searchTarget, movieTarget;
     private WindowState savedState;
     private WindowStyle savedStyle;
@@ -59,6 +63,9 @@ public partial class MainWindow : Window
         try
         {
             var path = smoke ? Path.Combine(Path.GetTempPath(), "VideoPlayer-smoke-" + Guid.NewGuid().ToString("N")) : profile;
+            try { collections=new MovieCollections(Path.Combine(smoke?path:Path.GetDirectoryName(path)!,"collections.json")); }
+            catch (Exception error) when(error is IOException or UnauthorizedAccessException or JsonException)
+            { Log("collections.load."+error.GetType().Name); }
             var environment = await CoreWebView2Environment.CreateAsync(null, path);
             await Browser.EnsureCoreWebView2Async(environment);
             if (closed) return;
@@ -71,7 +78,7 @@ public partial class MainWindow : Window
             core.NavigationCompleted += (_, args) =>
             {
                 if (!args.IsSuccess) { Status.Text = "Nie udało się wczytać strony. Spróbuj ponownie lub wybierz Pokaż stronę."; Log("navigation.failed." + args.WebErrorStatus); }
-                else Log("navigation.complete", core.Source);
+                else { Log("navigation.complete", core.Source); _=UpdateMetadata(core.Source,epoch); }
             };
             core.NewWindowRequested += (_, args) =>
             {
@@ -87,12 +94,6 @@ public partial class MainWindow : Window
                 if (core.ContainsFullScreenElement) { presentation.User(); EnterFullscreen(); }
                 else ExitFullscreen();
             };
-            Browser.CoreWebView2Controller.AcceleratorKeyPressed += (_, args) =>
-            {
-                if (args.KeyEventKind is not (CoreWebView2KeyEventKind.KeyDown or CoreWebView2KeyEventKind.SystemKeyDown)) return;
-                if (args.VirtualKey == 27 && fullscreen) { args.Handled = true; Dispatcher.InvokeAsync(() => LeaveFullscreen()); }
-                else if (args.VirtualKey == 122) { args.Handled = true; Dispatcher.InvokeAsync(() => ToggleFullscreen()); }
-            };
             core.ContextMenuRequested += (_, args) =>
             {
                 var command = environment.CreateContextMenuItem("Pokaż przyciski / wyjdź z pełnego ekranu", null, CoreWebView2ContextMenuItemKind.Command);
@@ -107,7 +108,7 @@ public partial class MainWindow : Window
                 else if (args.Key == Key.Escape && fullscreen) { LeaveFullscreen(); args.Handled = true; }
             };
             ready = true; SearchButton.IsEnabled = true;
-            Status.Text = "Wpisz tytuł filmu lub wklej link Vider / Freedisc.";
+            Status.Text = collections==null?"Nie można odczytać lokalnych kolekcji. Historia i ulubione są niedostępne; plik pozostaje zachowany.":"Wpisz tytuł filmu lub wklej link Vider / Freedisc.";
             Query.Focus(); timer.Start();
             if (smoke) await SmokeTest();
         }
@@ -131,6 +132,11 @@ public partial class MainWindow : Window
         if (mode == Mode.Movie)
         {
             ExitFullscreen(); presentation.Navigation();
+            if(Policy.Movie(args.Uri))
+            {
+                var known=currentMovie!=null && MovieCollections.Key(currentMovie.url)==MovieCollections.Key(args.Uri)?currentMovie:collections?.Find(args.Uri)?.Card ?? new MovieCard("",args.Uri,"");
+                currentMovie=known with { url=args.Uri }; CollectionAction(()=>collections?.Opened(currentMovie));
+            }
             // Restore the selected movie once if the service redirects through its homepage.
             if (Policy.HomePage(args.Uri) && movieTarget != null && !retryUsed)
             {
@@ -184,7 +190,7 @@ public partial class MainWindow : Window
                 if (closed || current != epoch) return;
                 var found = JsonSerializer.Deserialize<List<MovieCard>>(json ?? "[]") ?? [];
                 var movies = found.Where(m => Policy.Movie(m.url) && Policy.Site(m.url) == source).Take(20).ToList();
-                if (movies.Count > 0) { Render(movies); searching = false; Status.Text = $"Znaleziono: {movies.Count}. Kliknij miniaturkę, aby otworzyć film."; }
+                if (movies.Count > 0) { searchCards=movies;collection="results";Render(movies); searching = false; Status.Text = $"Znaleziono: {movies.Count}. Kliknij miniaturkę, aby otworzyć film."; }
                 else if (++searchTicks >= 30)
                 {
                     searching = false; ShowBrowser();
@@ -212,6 +218,7 @@ public partial class MainWindow : Window
         if (Policy.Movie(text)) { OpenMovie(text); return; }
         if (text.Length is < 1 or > 120) { Status.Text = "Wpisz tytuł (do 120 znaków) albo link do filmu."; return; }
         LeaveFullscreen(); ++epoch; mode = Mode.Search; searching = true; routed = false; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); movieTarget = null; returnPending = false;
+        collection="results";ClearCollection.Visibility=Visibility.Collapsed;searchCards=[];
         Cards.Children.Clear(); Welcome.Visibility = Visibility.Collapsed;
         PlayerTools.Visibility = Visibility.Collapsed; Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible;
         searchTarget = Policy.Search(source, text);
@@ -220,7 +227,8 @@ public partial class MainWindow : Window
     }
     private void Render(List<MovieCard> movies)
     {
-        Cards.Children.Clear(); Welcome.Visibility = Visibility.Collapsed; Results.Visibility = Visibility.Visible; Browser.Visibility = Visibility.Hidden;
+        Cards.Children.Clear(); Welcome.Visibility = movies.Count==0?Visibility.Visible:Visibility.Collapsed; Results.Visibility = Visibility.Visible; Browser.Visibility = Visibility.Hidden;
+        ClearCollection.Visibility=collection=="results"?Visibility.Collapsed:Visibility.Visible;
         foreach (var movie in movies)
         {
             var stack = new StackPanel { Width = 238 };
@@ -235,12 +243,24 @@ public partial class MainWindow : Window
             stack.Children.Add(new TextBlock { Text = movie.title, TextWrapping = TextWrapping.Wrap, MaxHeight = 63, FontSize = 16, Margin = new Thickness(12,12,12,6), FontWeight = FontWeights.SemiBold });
             stack.Children.Add(new TextBlock { Text = Policy.Site(movie.url) == Source.Vider ? "VIDER  ·  Otwórz film" : "FREEDISC  ·  Otwórz film", FontSize = 11, Foreground = Brushes.LightSeaGreen, Margin = new Thickness(12,4,12,12) });
             var card = new Button { Content = stack, Padding = new Thickness(0), Margin = new Thickness(6), VerticalContentAlignment = VerticalAlignment.Top, ToolTip = movie.title };
-            card.Click += (_, _) => OpenMovie(movie.url); Cards.Children.Add(card);
+            card.Click += (_, _) => OpenMovie(movie.url,movie);
+            var tile=new StackPanel { Width=250,Margin=new Thickness(2) };tile.Children.Add(card);
+            var actions=new WrapPanel();
+            var star=new Button { Content=collections?.Favorite(movie.url)==true?"★ Usuń":"☆ Ulubione",Padding=new Thickness(10,7),FontSize=12 };
+            star.Click+=(_,_)=>{if(CollectionAction(()=>collections?.Toggle(movie)))RefreshCollection();};actions.Children.Add(star);
+            if(collection!="results")
+            {
+                var remove=new Button { Content=collection=="history"?"Usuń z historii":"Usuń z listy",Padding=new Thickness(10,7),FontSize=12 };
+                remove.Click+=(_,_)=>{if(CollectionAction(()=>collections?.Remove(collection,movie.url)))RefreshCollection();};actions.Children.Add(remove);
+            }
+            tile.Children.Add(actions);Cards.Children.Add(tile);
         }
     }
-    private void OpenMovie(string url)
+    private void OpenMovie(string url,MovieCard? card=null)
     {
         if (!ready || !Policy.Movie(url)) { Status.Text = "Wklej prawidłowy link do filmu Vider lub Freedisc."; return; }
+        currentMovie=card??collections?.Find(url)?.Card??new MovieCard("",url,"");
+        CollectionAction(()=>collections?.Opened(currentMovie));
         LeaveFullscreen(); ++epoch; mode = Mode.Movie; searching = false; movieTarget = url; retryUsed = false; returnPending = false; presentation.Navigation();
         PlayerTools.Visibility = Visibility.Visible; ShowBrowser(); Status.Text = "Otwieranie filmu…";
         Browser.CoreWebView2.Navigate(url);
@@ -263,14 +283,14 @@ public partial class MainWindow : Window
         if (fullscreen) return;
         ShowBrowser(); fullscreen = true; savedState = WindowState; savedStyle = WindowStyle; savedResize = ResizeMode;
         WindowState = WindowState.Normal; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; WindowState = WindowState.Maximized;
-        Header.Visibility = SearchBar.Visibility = PlayerTools.Visibility = Footer.Visibility = Visibility.Collapsed;
+        Header.Visibility = SearchBar.Visibility = CollectionsBar.Visibility = PlayerTools.Visibility = Footer.Visibility = Visibility.Collapsed;
         Browser.Focus();
     }
     private void ExitFullscreen()
     {
         if (!fullscreen) return;
         fullscreen = false; WindowState = WindowState.Normal; WindowStyle = savedStyle; ResizeMode = savedResize; WindowState = savedState;
-        Header.Visibility = SearchBar.Visibility = Footer.Visibility = Visibility.Visible;
+        Header.Visibility = SearchBar.Visibility = CollectionsBar.Visibility = Footer.Visibility = Visibility.Visible;
         PlayerTools.Visibility = mode == Mode.Movie ? Visibility.Visible : Visibility.Collapsed;
     }
     private void LeaveFullscreen()
@@ -292,15 +312,56 @@ public partial class MainWindow : Window
         source = SourcePicker.SelectedIndex == 1 ? Source.Freedisc : Source.Vider;
         if (!ready) return;
         ++epoch; mode = Mode.Results; searching = false; movieTarget = null; LeaveFullscreen(); Browser.CoreWebView2.Stop(); Browser.CoreWebView2.Navigate("about:blank");
-        Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible; PlayerTools.Visibility = Visibility.Collapsed; Cards.Children.Clear(); Welcome.Visibility = Visibility.Visible;
+        Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible; PlayerTools.Visibility = Visibility.Collapsed; Cards.Children.Clear(); Welcome.Visibility = Visibility.Visible;collection="results";searchCards=[];ClearCollection.Visibility=Visibility.Collapsed;
         Status.Text = "Wybrano " + (source == Source.Vider ? "Vider" : "Freedisc") + ". Wpisz tytuł i wybierz Szukaj.";
     }
-    private void ResultsClick(object sender, RoutedEventArgs e)
+    private bool CollectionAction(Action action)
     {
-        ++epoch; LeaveFullscreen(); mode = Mode.Results; searching = false;
-        Browser.CoreWebView2.Stop(); Browser.CoreWebView2.Navigate("about:blank");
-        Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible; PlayerTools.Visibility = Visibility.Collapsed;
-        Status.Text = "Wyniki wyszukiwania. Wybierz film lub wpisz nowy tytuł.";
+        if(collections==null){Status.Text="Lokalne kolekcje są niedostępne. Sprawdź uprawnienia do folderu aplikacji.";return false;}
+        try{action();return true;}
+        catch(Exception error) when(error is IOException or UnauthorizedAccessException)
+        {Log("collections.write."+error.GetType().Name);Status.Text="Nie udało się zapisać zmian kolekcji na dysku.";return false;}
+    }
+    private async Task UpdateMetadata(string url,int current)
+    {
+        if(!Policy.Movie(url)||collections==null)return;
+        try
+        {
+            var raw=await Eval("(function(){const h=document.querySelector('h1');const m=document.querySelector('meta[property=\"og:image\"],link[rel=\"image_src\"]');return JSON.stringify({title:h?h.textContent:document.title,thumbnail:m?(m.content||m.href||''):''});}())");
+            if(closed||epoch!=current||!Policy.Movie(Browser.CoreWebView2.Source)||MovieCollections.Key(url)!=MovieCollections.Key(Browser.CoreWebView2.Source))return;
+            using var data=JsonDocument.Parse(raw??"{}");
+            string title=data.RootElement.TryGetProperty("title",out var t)?t.GetString()??"":"";
+            string thumbnail=data.RootElement.TryGetProperty("thumbnail",out var thumb)?thumb.GetString()??"":"";
+            CollectionAction(()=>collections.Metadata(new(title,url,thumbnail)));
+            currentMovie=collections.Find(url)?.Card??currentMovie;
+        }
+        catch(Exception error){Log("collections.metadata."+error.GetType().Name);}
+    }
+    private void RefreshCollection()
+    {
+        var list=collection=="results"?searchCards:collections?.Items(collection).Select(i=>i.Card).ToList()??[];
+        Render(list);
+        Status.Text=(collection=="history"?"Historia":collection=="favorites"?"Ulubione":"Wyniki")+" · "+list.Count+(list.Count==0?" · lista jest pusta":" · kliknij miniaturkę, aby otworzyć film");
+    }
+    private void ShowCollection(string selected)
+    {
+        ++epoch; LeaveFullscreen();mode=Mode.Results;searching=false;
+        if(ready){Browser.CoreWebView2.Stop();Browser.CoreWebView2.Navigate("about:blank");}
+        collection=selected;PlayerTools.Visibility=Visibility.Collapsed;RefreshCollection();
+    }
+    private void ResultsClick(object sender,RoutedEventArgs e)=>ShowCollection("results");
+    private void HistoryClick(object sender,RoutedEventArgs e)=>ShowCollection("history");
+    private void FavoritesClick(object sender,RoutedEventArgs e)=>ShowCollection("favorites");
+    private void ClearCollectionClick(object sender,RoutedEventArgs e)
+    {
+        if(collection=="results")return;
+        if(MessageBox.Show(this,collection=="history"?"Wyczyścić historię na tym komputerze?":"Wyczyścić ulubione na tym komputerze?","Usuń pozycje",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
+        if(CollectionAction(()=>collections?.Clear(collection)))RefreshCollection();
+    }
+    private void FavoriteMovieClick(object sender,RoutedEventArgs e)
+    {
+        if(currentMovie==null)return;
+        if(CollectionAction(()=>collections?.Toggle(currentMovie)))Status.Text=collections?.Favorite(currentMovie.url)==true?"Dodano do ulubionych.":"Usunięto z ulubionych.";
     }
     private void ReloadClick(object sender, RoutedEventArgs e) { presentation.Navigation(); Browser.Reload(); }
     private async void FocusClick(object sender, RoutedEventArgs e) { try { await FocusMovie(false, epoch); } catch (Exception error) { Log("focus." + error.GetType().Name); } }
@@ -317,7 +378,7 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog { FileName = "VideoPlayer-raport.txt", Filter = "Raport tekstowy|*.txt" };
         if (dialog.ShowDialog(this) != true) return;
-        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.1.0", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
+        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.2.0", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
         catch (IOException) { Status.Text = "Nie udało się zapisać raportu w wybranym miejscu."; }
     }
     private void WindowClosing(object? sender, CancelEventArgs e) { closed = true; ++epoch; timer.Stop(); Browser.Dispose(); }
@@ -345,7 +406,13 @@ public partial class MainWindow : Window
         if (cards?.Count != 1 || cards[0].title != "Test movie") throw new Exception("Search extraction failed");
         Render(cards);
         if (Cards.Children.Count != 1) throw new Exception("Native cards failed");
-        WriteSmoke("PASS: WebView2 startup, automatic film focus, native fullscreen, no autoplay, manual exit, page restore, challenge detection, search extraction, native cards.");
+        CollectionAction(()=>collections?.Opened(cards[0]));
+        CollectionAction(()=>collections?.Toggle(cards[0]));
+        ShowCollection("history");if(Cards.Children.Count!=1)throw new Exception("History tiles failed");
+        CollectionAction(()=>collections?.Clear("history"));RefreshCollection();if(Cards.Children.Count!=0)throw new Exception("History clear failed");
+        ShowCollection("favorites");if(Cards.Children.Count!=1)throw new Exception("Favorites independent from history failed");
+        CollectionAction(()=>collections?.Remove("favorites",cards[0].url));RefreshCollection();if(Cards.Children.Count!=0)throw new Exception("Favorite removal failed");
+        WriteSmoke("PASS: WebView2 startup, automatic film focus, native fullscreen, no autoplay, manual exit, page restore, challenge detection, search extraction, native cards, local history/favorites tiles and independent deletion.");
         Application.Current.Shutdown(0);
     }
 }

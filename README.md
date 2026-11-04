@@ -170,3 +170,7 @@ Polityka automatycznego wejścia, powrotu po weryfikacji i respektowania Wstecz 
 ## Windows
 
 Wersja desktopowa C# / WPF / WebView2 znajduje się w [`windows`](windows/README.md). Osobny workflow `Windows desktop` buduje samodzielny EXE dla Windows x64. Skrypty obsługi Vider i Freedisc są współdzielone z aplikacją Android.
+
+## Własne kolekcje (Android 0.7.0 / Windows 0.2.0)
+
+Historia i Ulubione są lokalnymi listami kafelków, niezależnymi od kont Vider i Freedisc. Historia zawiera 200 ostatnio otwieranych filmów, bez duplikatów tego samego filmu. Na Androidzie/TV przytrzymaj kafelek / OK (lub Menu), aby dodać do ulubionych lub usunąć pozycję. W odtwarzaczu służy do tego przycisk ★. Wyczyść wymaga potwierdzenia. Historia i ulubione są usuwane niezależnie. Dotychczasowe zapisane linki Androida są przenoszone do nowych ulubionych. Dla linków bez dostępnej grafiki kafelek ma symbol ▶. Usunięcie danych aplikacji usuwa też lokalne listy.

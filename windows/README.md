@@ -1,4 +1,4 @@
-# VideoPlayer dla Windows — 0.1.0
+# VideoPlayer dla Windows — 0.2.0
 
 Pierwsza wersja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
@@ -31,3 +31,7 @@ Workflow `.github/workflows/windows.yml` generuje ikonę z istniejącego wzoru, 
 ## Współdzielenie kodu
 
 Skrypty JS są osadzane bezpośrednio z `app/src/main/assets` podczas kompilacji. Zmiana ekstrakcji miniatur, układu playera lub obsługi ramek trafia do obu platform; interfejs i sesja Windows są osobne.
+
+## Historia i ulubione
+
+Zakładki **Historia** i **Ulubione** pokazują własne, lokalne kolekcje jako kafelki. Historia przechowuje 200 ostatnio otwieranych filmów; ponowne otwarcie przenosi film na początek. Każdy kafelek ma przycisk dodania/usunięcia z ulubionych. Na listach można usuwać pojedyncze pozycje, a przycisk Wyczyść listę wymaga potwierdzenia. Wyczyszczenie historii nie usuwa ulubionych. Dane zapisują się w `%LOCALAPPDATA%\VideoPlayer\collections.json`; nie synchronizują się z Androidem ani kontami serwisów. Gdy film otwierany jest z wklejonego linku i nie udostępnia miniaturki, kafelek pokazuje symbol odtwarzania.

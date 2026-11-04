@@ -1,10 +1,10 @@
 <Window x:Class="VideoPlayer.Windows.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:wv="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf" Title="VideoPlayer" Width="1180" Height="800" MinWidth="700" MinHeight="480" Background="#0D1821" Foreground="#EBF3F6" FontFamily="Segoe UI" Loaded="WindowLoaded" Closing="WindowClosing">
   <Grid>
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid x:Name="Header" Margin="24,22,24,12">
       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <StackPanel Orientation="Horizontal"><TextBlock Text="▶" Foreground="{StaticResource Accent}" FontSize="32" Margin="0,0,14,0"/><StackPanel><TextBlock Text="VideoPlayer" FontSize="27" FontWeight="SemiBold"/><TextBlock Text="Twoje filmy. Jeden wygodny widok." Foreground="#9FB4C0" FontSize="13"/></StackPanel></StackPanel>
-      <TextBlock Grid.Column="1" Text="WINDOWS · 0.1" Foreground="#79DFC7" VerticalAlignment="Center" FontSize="12"/>
+      <TextBlock Grid.Column="1" Text="WINDOWS · 0.2" Foreground="#79DFC7" VerticalAlignment="Center" FontSize="12"/>
     </Grid>
     <Grid x:Name="SearchBar" Grid.Row="1" Margin="24,0,24,12">
       <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -13,16 +13,19 @@
       <Button x:Name="SearchButton" Grid.Column="2" Content="Szukaj" Background="#22776D" Click="SearchClick"/>
       <Button Grid.Column="3" Content="Otwórz link" Click="OpenLinkClick"/>
     </Grid>
-    <WrapPanel x:Name="PlayerTools" Grid.Row="2" Margin="20,0,20,8" Visibility="Collapsed">
-      <Button Content="← Wyniki" Click="ResultsClick"/><Button Content="Odśwież" Click="ReloadClick"/><Button Content="Widok filmu" Click="FocusClick"/><Button Content="Cała strona" Click="PageClick"/><Button Content="Pełny ekran · F11" Click="FullscreenClick"/><Button Content="Wróć do filmu" Click="ReturnClick"/>
+    <WrapPanel x:Name="CollectionsBar" Grid.Row="2" Margin="20,0,20,8">
+      <Button Content="Wyniki" Click="ResultsClick"/><Button Content="Historia" Click="HistoryClick"/><Button Content="Ulubione" Click="FavoritesClick"/><Button x:Name="ClearCollection" Content="Wyczyść listę" Click="ClearCollectionClick" Visibility="Collapsed"/>
     </WrapPanel>
-    <Grid Grid.Row="3" x:Name="Workspace">
+    <WrapPanel x:Name="PlayerTools" Grid.Row="3" Margin="20,0,20,8" Visibility="Collapsed">
+      <Button Content="← Wyniki" Click="ResultsClick"/><Button Content="★ Ulubione" Click="FavoriteMovieClick"/><Button Content="Odśwież" Click="ReloadClick"/><Button Content="Widok filmu" Click="FocusClick"/><Button Content="Cała strona" Click="PageClick"/><Button Content="Pełny ekran · F11" Click="FullscreenClick"/><Button Content="Wróć do filmu" Click="ReturnClick"/>
+    </WrapPanel>
+    <Grid Grid.Row="4" x:Name="Workspace">
       <wv:WebView2 x:Name="Browser" Visibility="Hidden" DefaultBackgroundColor="Black"/>
       <ScrollViewer x:Name="Results" VerticalScrollBarVisibility="Auto" Padding="20,4,20,20">
         <StackPanel><Border x:Name="Welcome" Background="#142731" CornerRadius="16" Padding="28" Margin="4,12,4,20"><StackPanel><TextBlock Text="Co dziś oglądamy?" FontSize="28" FontWeight="SemiBold"/><TextBlock Text="Wybierz serwis i wpisz tytuł. Wyniki pojawią się jako miniaturki." Margin="0,12,0,0" Foreground="#A5BDC7" TextWrapping="Wrap" FontSize="16"/><TextBlock Text="Możesz też wkleić link do filmu w polu wyszukiwania." Margin="0,8,0,0" Foreground="#79DFC7"/></StackPanel></Border><WrapPanel x:Name="Cards"/></StackPanel>
       </ScrollViewer>
     </Grid>
-    <DockPanel x:Name="Footer" Grid.Row="4" Background="#14242D" LastChildFill="True" Margin="0,8,0,0">
+    <DockPanel x:Name="Footer" Grid.Row="5" Background="#14242D" LastChildFill="True" Margin="0,8,0,0">
       <Button DockPanel.Dock="Right" Content="Raport" Click="ReportClick"/><Button DockPanel.Dock="Right" Content="Pokaż stronę" Click="ShowPageClick"/><Button DockPanel.Dock="Right" Content="Sprawdź wyniki" Click="CheckClick"/>
       <TextBlock x:Name="Status" Text="Uruchamianie…" Foreground="#B9CDD5" Margin="24,12" VerticalAlignment="Center" TextWrapping="Wrap"/>
     </DockPanel>

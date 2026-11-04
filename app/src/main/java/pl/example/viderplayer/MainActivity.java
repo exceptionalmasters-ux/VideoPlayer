@@ -70,6 +70,8 @@ public final class MainActivity extends Activity {
     private final java.util.Map<View,Integer> playerChrome=new java.util.IdentityHashMap<>();
     private final PresentationPolicy presentation=new PresentationPolicy();
     private int presentationScan;
+    private LocalLibrary library;
+    private String launchMovieKey="",launchMovieTitle="",launchMovieThumbnail="";
     private int playerUiFlags;
     private Button fullscreenControls;
 
@@ -77,6 +79,9 @@ public final class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        library=new LocalLibrary(this);
+        String launchUrl=sharedUrl(getIntent());
+        if(launchUrl!=null){launchMovieKey=MovieLibrary.key(launchUrl);launchMovieTitle=getIntent().getStringExtra("movieTitle");launchMovieThumbnail=getIntent().getStringExtra("movieThumbnail");}
         television=TvUi.enabled(this);
         TvUi.immersive(this);
         root = new FrameLayout(this);
@@ -115,7 +120,8 @@ public final class MainActivity extends Activity {
         button(actions, "Wyniki", this::showSearch);
         button(actions, "Odśwież", () -> web.reload());
         button(actions, "★", this::bookmark);
-        button(actions, "Lista", this::showBookmarks);
+        button(actions, "Ulubione", this::showBookmarks);
+        button(actions,"Historia",()->showCollection("history"));
         button(actions, "↗", () -> external(web.getUrl()));
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(this);
         scroll.addView(actions);
@@ -138,6 +144,7 @@ public final class MainActivity extends Activity {
         if(!television)button(tools,"Pełny ekran",this::enterTvFullscreen);
         button(tools, "Wróć do filmu", () -> { if (movieNavigation.target() != null) loadPage(movieNavigation.target()); });
         button(tools, "Diagnostyka", this::showDiagnostics);
+        if(television){button(tools,"★",this::bookmark);button(tools,"Ulubione",this::showBookmarks);button(tools,"Historia",()->showCollection("history"));}
         android.widget.HorizontalScrollView toolsScroll = new android.widget.HorizontalScrollView(this);
         toolsScroll.addView(tools);
         content.addView(toolsScroll);
@@ -237,6 +244,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 loadFailed = false;
+                if(UrlPolicy.isMovie(url))library.opened(url,MovieLibrary.key(url).equals(launchMovieKey)?launchMovieTitle:"",MovieLibrary.key(url).equals(launchMovieKey)?launchMovieThumbnail:"");
                 if(playerFullscreen)exitPlayerFullscreen(false);
                 presentation.navigation();
                 ++presentationScan;
@@ -251,6 +259,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view, String url) {
                 diagnostics.add("page.finished", url, 0);
+                updateMovieMetadata(url);
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
@@ -611,33 +620,25 @@ public final class MainActivity extends Activity {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
         catch (ActivityNotFoundException e) { toast("Brak przeglądarki do otwarcia linku."); }
     }
-    private JSONArray bookmarks() {
-        try { return new JSONArray(getPreferences(MODE_PRIVATE).getString("bookmarks", "[]")); }
-        catch (JSONException e) { return new JSONArray(); }
+    private void updateMovieMetadata(String url){
+        if(!UrlPolicy.isMovie(url)||!MovieLibrary.key(url).equals(MovieLibrary.key(web.getUrl())))return;
+        final int generation=pageGeneration;
+        web.evaluateJavascript("(function(){const h=document.querySelector('h1');const m=document.querySelector('meta[property=\"og:image\"],link[rel=\"image_src\"]');return JSON.stringify({title:h?h.textContent:document.title,thumbnail:m?(m.content||m.href||''):''});}())",value->{
+            if(!alive||generation!=pageGeneration)return;
+            try{JSONObject item=new JSONObject((String)new JSONTokener(value).nextValue());library.metadata(url,item.optString("title"),item.optString("thumbnail"));}catch(Exception ignored){}
+        });
     }
     private void bookmark() {
-        String url = web.getUrl();
-        if (!allowed(url)) { toast("Najpierw otwórz stronę filmu."); return; }
-        JSONArray list = bookmarks();
-        for (int i = 0; i < list.length(); i++) {
-            if (list.optJSONObject(i) != null && url.equals(list.optJSONObject(i).optString("url"))) { toast("Ten link jest już na liście."); return; }
-        }
-        try {
-            String title = web.getTitle();
-            list.put(new JSONObject().put("url", url).put("title", title == null ? url : title));
-            getPreferences(MODE_PRIVATE).edit().putString("bookmarks", list.toString()).apply();
-            toast("Dodano do ulubionych.");
-        } catch (JSONException e) { toast("Nie udało się zapisać linku."); }
+        String url=web.getUrl();
+        if(!UrlPolicy.isMovie(url))url=movieNavigation.target();
+        if(!UrlPolicy.isMovie(url)){toast("Najpierw otwórz film.");return;}
+        MovieLibrary.Item item=library.find(url);
+        boolean added=library.toggle(url,item==null?"":item.title,item==null?"":item.thumbnail);
+        toast(added?"Dodano do ulubionych.":"Usunięto z ulubionych.");
     }
-    private void showBookmarks() {
-        JSONArray list = bookmarks();
-        if (list.length() == 0) { toast("Lista jest pusta. Dodaj stronę przyciskiem ★."); return; }
-        String[] names = new String[list.length()];
-        for (int i = 0; i < names.length; i++) names[i] = list.optJSONObject(i).optString("title");
-        new AlertDialog.Builder(this).setTitle("Ulubione")
-            .setItems(names, (d, which) -> openInput(list.optJSONObject(which).optString("url")))
-            .setNeutralButton("Wyczyść listę", (d, w) -> getPreferences(MODE_PRIVATE).edit().remove("bookmarks").apply())
-            .setNegativeButton("Zamknij", null).show();
+    private void showBookmarks(){showCollection("favorites");}
+    private void showCollection(String collection){
+        startActivity(new Intent(this,SearchActivity.class).putExtra("collection",collection).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
     private void exitFullscreen() {
         if (customView == null) return;

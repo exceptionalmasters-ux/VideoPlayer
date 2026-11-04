@@ -38,6 +38,10 @@ public final class SearchActivity extends Activity {
     private ScrollView resultsView;
     private WebView engine;
     private JSONArray results = new JSONArray();
+    private JSONArray searchResults = new JSONArray();
+    private String collection = "results";
+    private LocalLibrary library;
+    private Button clearCollection;
     private int scanToken;
     private boolean active = true;
     private final DiagnosticLog diagnostics = new DiagnosticLog();
@@ -71,6 +75,7 @@ public final class SearchActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        library = new LocalLibrary(this);
         television=TvUi.enabled(this);
         TvUi.immersive(this);
         if(saved!=null)selectedResultIndex=saved.getInt("selectedResultIndex",0);
@@ -125,6 +130,15 @@ public final class SearchActivity extends Activity {
         addButton(actions, "Mam link", this::pasteLink);
         addButton(actions, "Raport", this::exportReport);
         root.addView(actions);
+        LinearLayout collections = new LinearLayout(this);
+        addButton(collections,"Wyniki",()->showCollection("results"));
+        addButton(collections,"Historia",()->showCollection("history"));
+        addButton(collections,"Ulubione",()->showCollection("favorites"));
+        addButton(collections,"Wyczyść",this::clearCollection);
+        clearCollection=(Button)collections.getChildAt(collections.getChildCount()-1);
+        clearCollection.setVisibility(View.GONE);
+        HorizontalScrollView collectionsScroll=new HorizontalScrollView(this);
+        collectionsScroll.addView(collections);root.addView(collectionsScroll);
         previewButton = new Button(this);
         previewButton.setText("Pokaż stronę");
         TvUi.focusable(previewButton);
@@ -246,9 +260,41 @@ public final class SearchActivity extends Activity {
             requestedSearch = saved.getString("requestedSearch");
             searchReturnUsed = saved.getBoolean("searchReturnUsed");
             engine.restoreState(saved);
+            searchResults=results;
             if (results.length() > 0) render();
-            else if (!query.getText().toString().trim().isEmpty()) search();
+            else if (!query.getText().toString().trim().isEmpty()&&"results".equals(saved.getString("collection","results"))) search();
         }
+        String initialCollection=saved!=null?saved.getString("collection","results"):getIntent().getStringExtra("collection");
+        if(initialCollection!=null&&!"results".equals(initialCollection))showCollection(initialCollection);
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);
+        showCollection(intent.getStringExtra("collection"));
+    }
+    private void showCollection(String selected){
+        if("results".equals(collection))searchResults=results;
+        collection="history".equals(selected)||"favorites".equals(selected)?selected:"results";
+        stopSearch();engine.stopLoading();dismissVerification();selectedResultIndex=0;
+        results="results".equals(collection)?searchResults:library.items(collection);
+        render();
+    }
+    private void clearCollection(){
+        if("results".equals(collection))return;
+        final String selected=collection;
+        new AlertDialog.Builder(this).setTitle("history".equals(selected)?"Wyczyścić historię?":"Wyczyścić ulubione?")
+            .setMessage("Pozycje zostaną usunięte tylko z tej listy na tym urządzeniu.")
+            .setPositiveButton("Wyczyść",(d,w)->{library.clear(selected);showCollection(selected);})
+            .setNegativeButton("Anuluj",null).show();
+    }
+    private void cardActions(JSONObject item){
+        final String url=item.optString("url");
+        boolean favorite=library.favorite(url);
+        String[] options="history".equals(collection)?new String[]{favorite?"Usuń z ulubionych":"Dodaj do ulubionych","Usuń z historii"}:new String[]{favorite?"Usuń z ulubionych":"Dodaj do ulubionych"};
+        new AlertDialog.Builder(this).setTitle(item.optString("title")).setItems(options,(d,which)->{
+            if(which==0)library.toggle(url,item.optString("title"),item.optString("thumbnail"));
+            else library.remove("history",url);
+            showCollection(collection);
+        }).setNegativeButton("Zamknij",null).show();
     }
     private void selectSource(SiteSource source) {
         if (source == selectedSource) return;
@@ -257,11 +303,12 @@ public final class SearchActivity extends Activity {
         dismissVerification();
         previewButton.setVisibility(View.GONE);
         selectedSource = source;
+        collection="results";clearCollection.setVisibility(View.GONE);
         configureSource();
         requestedSearch = null;
         searchReturnUsed = false;
         lastSearchAt = 0;
-        results = new JSONArray();
+        results = new JSONArray();searchResults=results;
         selectedResultIndex=0;
         if(television){query.setNextFocusDownId(View.NO_ID);searchButton.setNextFocusDownId(View.NO_ID);}
         thumbnails.nextGeneration();
@@ -283,6 +330,7 @@ public final class SearchActivity extends Activity {
         if (lastSearchAt != 0 && now - lastSearchAt < 2000) {
             status.setText("Poczekaj chwilę przed kolejnym wyszukiwaniem."); return;
         }
+        collection="results";clearCollection.setVisibility(View.GONE);
         stopSearch();
         engine.stopLoading();
         dismissVerification();
@@ -290,7 +338,7 @@ public final class SearchActivity extends Activity {
         lastHttpError = 0;
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(), 0);
         query.clearFocus();
-        results = new JSONArray();
+        results = new JSONArray();searchResults=results;
         selectedResultIndex=0;
         if(television){query.setNextFocusDownId(View.NO_ID);searchButton.setNextFocusDownId(View.NO_ID);}
         thumbnails.nextGeneration();
@@ -451,7 +499,7 @@ public final class SearchActivity extends Activity {
                     }
                     if (accepted.length() > 0) {
                         diagnostics.add("search.cards", null, accepted.length());
-                        results = accepted; render(); return;
+                        results = accepted; searchResults=accepted; collection="results"; render(); return;
                     }
                 }
             } catch (Exception ignored) { diagnostics.add("search.parse_error", null, 0); }
@@ -639,7 +687,9 @@ public final class SearchActivity extends Activity {
         engine.setVisibility(View.INVISIBLE);
         resultsView.setVisibility(View.VISIBLE);
         grid.removeAllViews();
-        status.setText("Znalezione filmy · " + results.length() + (television?" · wybierz film i naciśnij OK":" · dotknij miniatury, aby otworzyć film"));
+        clearCollection.setVisibility("results".equals(collection)?View.GONE:View.VISIBLE);
+        String heading="history".equals(collection)?"Historia":"favorites".equals(collection)?"Ulubione":"Znalezione filmy";
+        status.setText(heading+" · "+results.length()+(results.length()==0?" · lista jest pusta":television?" · OK: film · przytrzymaj OK: opcje":" · dotknij: film · przytrzymaj: opcje"));
         int columns=television?4:2;
         int width = (getResources().getDisplayMetrics().widthPixels - dp(television?64+16+columns*12:40)) / columns;
         int imageHeight=television?width*9/16:dp(116);
@@ -676,11 +726,13 @@ public final class SearchActivity extends Activity {
             name.setPadding(dp(10), dp(8), dp(10), dp(4));
             card.addView(name);
             TextView host = text(Uri.parse(url).getHost(), 11, Color.rgb(114, 220, 196));
+            if(library.favorite(url))host.setText("★ "+host.getText());
             host.setPadding(dp(10), 0, dp(10), dp(8));
             card.addView(host);
             card.setContentDescription("Odtwórz " + result.optString("title"));
             final int index=i;
             card.setOnClickListener(v -> {selectedResultIndex=index;openMovie(url);});
+            card.setOnLongClickListener(v->{cardActions(result);return true;});
             thumbnails.load(image, url, result.optString("thumbnail"), engine.getSettings().getUserAgentString());
         }
         if(television){
@@ -692,8 +744,10 @@ public final class SearchActivity extends Activity {
                 card.setNextFocusDownId(i+columns<grid.getChildCount()?grid.getChildAt(i+columns).getId():card.getId());
                 final int position=i;
                 card.setOnKeyListener((v,key,event)->{
+                    if(key==android.view.KeyEvent.KEYCODE_MENU||key==android.view.KeyEvent.KEYCODE_INFO){if(event.getAction()==android.view.KeyEvent.ACTION_UP)v.performLongClick();return true;}
                     if(key==android.view.KeyEvent.KEYCODE_DPAD_CENTER||key==android.view.KeyEvent.KEYCODE_ENTER){
-                        if(event.getAction()==android.view.KeyEvent.ACTION_UP)v.performClick();
+                        if(event.getAction()==android.view.KeyEvent.ACTION_DOWN&&event.getRepeatCount()==1){v.setTag(Boolean.TRUE);v.performLongClick();}
+                        if(event.getAction()==android.view.KeyEvent.ACTION_UP){if(!Boolean.TRUE.equals(v.getTag()))v.performClick();v.setTag(null);}
                         return true;
                     }
                     int target=position;
@@ -709,14 +763,17 @@ public final class SearchActivity extends Activity {
             if(grid.getChildCount()>0){
                 query.setNextFocusDownId(grid.getChildAt(0).getId());
                 searchButton.setNextFocusDownId(grid.getChildAt(0).getId());
-                grid.post(()->grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus());
+                grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
             }
         }
     }
     private void openMovie(String url) {
         if (!UrlPolicy.isMovie(url)) return;
         CookieManager.getInstance().flush();
-        startActivity(new Intent(this, MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)));
+        String title="",thumbnail="";
+        for(int i=0;i<results.length();i++){JSONObject item=results.optJSONObject(i);if(item!=null&&MovieLibrary.key(url).equals(MovieLibrary.key(item.optString("url")))){title=item.optString("title");thumbnail=item.optString("thumbnail");break;}}
+        library.opened(url,title,thumbnail);
+        startActivity(new Intent(this, MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)).putExtra("movieTitle",title).putExtra("movieThumbnail",thumbnail));
     }
     private void exportReport() {
         diagnostics.add("search.report_export_requested", engine.getUrl(), engine.getProgress());
@@ -765,7 +822,8 @@ public final class SearchActivity extends Activity {
         out.putString("query", query.getText().toString());
         out.putString("requestedSearch", requestedSearch);
         out.putBoolean("searchReturnUsed", searchReturnUsed);
-        out.putString("results", results.toString());
+        out.putString("results", ("results".equals(collection)?results:searchResults).toString());
+        out.putString("collection",collection);
         engine.saveState(out);
         super.onSaveInstanceState(out);
     }
@@ -776,12 +834,14 @@ public final class SearchActivity extends Activity {
     @Override protected void onResume() {
         super.onResume(); active = true;
         TvUi.immersive(this);
+        if(library!=null&&engine!=null&&!"results".equals(collection))showCollection(collection);
+        else if(engine!=null&&!searchRunning&&results.length()>0)render();
         if(television&&grid!=null&&grid.getChildCount()>0&&verificationPanel==null)
             grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
         if (engine != null) {
             engine.onResume();
             if (searchRunning && verificationPanel == null) armSearchTimeout();
-            if (results.length() == 0 && engine.getUrl() != null) inspect(++scanToken, 0);
+            if ("results".equals(collection)&&searchRunning&&results.length() == 0 && engine.getUrl() != null) inspect(++scanToken, 0);
         }
     }
     @Override protected void onDestroy() {

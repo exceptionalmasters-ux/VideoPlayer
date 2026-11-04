@@ -162,7 +162,7 @@ jobs:
             adb shell settings put secure tv_user_setup_complete 1
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
-            gradle --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=pl.example.viderplayer.TvRemoteTest,pl.example.viderplayer.AutomaticPresentationTest || { adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png; exit 1; }
+            gradle --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=pl.example.viderplayer.TvRemoteTest,pl.example.viderplayer.AutomaticPresentationTest,pl.example.viderplayer.CollectionsTest || { adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png; exit 1; }
             adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png
       - name: Upload TV reports
         if: always()

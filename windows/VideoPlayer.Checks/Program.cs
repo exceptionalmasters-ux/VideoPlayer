@@ -9,3 +9,23 @@ Check(!Policy.Thumbnail("https://img.vider.info.evil.test/a.png"), "Thumbnail ho
 Check(!Policy.Redact("https://vider.info/search/all/private?token=secret").Contains("secret"), "Redaction");
 var p = new Presentation(); Check(p.Pending, "Initial pending"); p.Entered(); p.Blocked(); Check(p.Pending, "Resume after challenge"); p.User(); p.Blocked(); Check(!p.Pending, "Respect manual exit"); p.Navigation(); Check(p.Pending, "New movie resets");
 Console.WriteLine("Windows policies: all checks passed.");
+
+var folder=Path.Combine(Path.GetTempPath(),"VideoPlayer-check-"+Guid.NewGuid().ToString("N"));
+var file=Path.Combine(folder,"collections.json");
+try {
+ var saved=new MovieCollections(file);
+ var ronin=new MovieCard("Ronin","https://vider.info/vid/+fone","https://img.vider.info/poster.png");
+ saved.Opened(ronin);saved.Toggle(ronin);
+ saved.Opened(new("Maverick","https://freedisc.pl/user,f-123,maverick-mp4",""));
+ saved.Opened(new("","https://vider.pl/vid/+fone?tracking=secret",""));
+ var reload=new MovieCollections(file);
+ Check(reload.Items("history").Count==2,"Persistent history deduplication");
+ Check(reload.Items("history")[0].Title=="Ronin","Metadata preserved on reopen");
+ Check(!File.ReadAllText(file).Contains("secret"),"No URL tracking in collections");
+ reload.Clear("history");reload.Metadata(ronin);
+ Check(reload.Items("history").Count==0 && reload.Favorite(ronin.url),"History deletion independent of favorites");
+ reload.Remove("favorites",ronin.url);reload.Metadata(ronin);
+ var empty=new MovieCollections(file);Check(empty.Items("history").Count==0&&empty.Items("favorites").Count==0,"Deletion survives restart and metadata cannot resurrect");
+ Check(MovieCollections.Key("https://freedisc.pl/user,f-123,old")==MovieCollections.Key("https://www.freedisc.pl/user,f-123,new"),"Freedisc stable identity");
+ Console.WriteLine("Persistent movie collections: all checks passed.");
+} finally { if(Directory.Exists(folder))Directory.Delete(folder,true); }
