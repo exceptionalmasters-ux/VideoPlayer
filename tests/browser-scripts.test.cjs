@@ -427,3 +427,10 @@ test('TV toggle follows content pause state after a resume seek even when JW sta
   window.__vpTvCommand('toggle','resume-ok');video.paused=false;window.__vpTvCommand('toggle','pause-ok');
   assert.deepEqual(calls,['resume-ok','pause']);
 });
+
+test('dedicated Play key stays playing instead of toggling the original control to pause',()=>{
+  const calls=[];const player={getState:()=> 'playing',play:()=>calls.push('play')};
+  const window={jwplayer:()=>player,__vpTvTapPlay:()=>{calls.push('tap');return true;},parent:{},addEventListener(){}};
+  vm.runInNewContext(asset('tv-media.js'),{window,document:{head:null,addEventListener(){}}});
+  window.__vpTvCommand('play','nonce');assert.deepEqual(calls,['play']);
+});

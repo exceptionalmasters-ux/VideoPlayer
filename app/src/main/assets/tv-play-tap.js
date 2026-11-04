@@ -26,7 +26,7 @@
   window.__vpTvTapPlay=function(id){
     if(!id)return false;
     // Activate the original Play control with a real native touch, not an untrusted DOM click.
-    const controls=document.querySelectorAll('.jwplayer .jw-display-icon-display .jw-icon-display,.jwplayer .jw-icon-playback');
+    const controls=document.querySelectorAll('.jwplayer .jw-display-icon-display,.jwplayer .jw-display-icon-display .jw-icon-display,.jwplayer .jw-icon-playback');
     for(const control of controls){
       if(/pause|pauza|wstrzymaj/i.test(control.getAttribute('aria-label')||''))continue;
       const r=control.getBoundingClientRect(),style=getComputedStyle(control);

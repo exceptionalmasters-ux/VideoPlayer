@@ -12,7 +12,7 @@
       if (player && typeof player.getState==='function' && player.getState()) {
         const video=document.querySelector?document.querySelector('.jwplayer video.jw-video'):null;
         const playing=video&&video.currentSrc? !video.paused : String(player.getState()).toLowerCase()==='playing';
-        if((action==='play'||action==='toggle'&&!playing)&&window.__vpTvTapPlay&&window.__vpTvTapPlay(requestId))return true;
+        if(((action==='play'||action==='toggle')&&!playing)&&window.__vpTvTapPlay&&window.__vpTvTapPlay(requestId))return true;
         if(action==='toggle') { if(playing)player.pause(true);else player.play(true); }
         else if(action==='play')player.play(true);
         else if(action==='pause')player.pause(true);
