@@ -180,17 +180,54 @@ public final class TvRemoteTest {
             assertEquals("true",evalMovie(scenario,"!!document.getElementById('target')"));
             scenario.onActivity(activity->{View root=activity.getWindow().getDecorView();assertNull(find(root,"−10 s"));assertNull(find(root,"+10 s"));assertNull(find(root,"Play / Pauza"));Button movie=find(root,"Widok filmu");assertTrue(movie.isShown());assertEquals(android.graphics.Color.WHITE,movie.getCurrentTextColor());find(root,"Kursor").performClick();assertTrue(((TvPointer)field(activity,"pointer")).active());assertTrue(((TvPointer)field(activity,"pointer")).isShown());});
             AtomicReference<Float> x=new AtomicReference<>();scenario.onActivity(activity->x.set((Float)field(field(activity,"pointer"),"x")));
-            key(KeyEvent.KEYCODE_DPAD_RIGHT);scenario.onActivity(activity->assertTrue((Float)field(field(activity,"pointer"),"x")>x.get()));
+            key(KeyEvent.KEYCODE_DPAD_RIGHT);scenario.onActivity(activity->assertEquals(TvUi.dp(activity,16),(Float)field(field(activity,"pointer"),"x")-x.get(),0.01));
             shell(InstrumentationRegistry.getInstrumentation(),"mkdir -p /sdcard/Download");
             shell(InstrumentationRegistry.getInstrumentation(),"screencap -p /sdcard/Download/videoplayer-tv-cursor.png");
             key(KeyEvent.KEYCODE_DPAD_CENTER);
             end=android.os.SystemClock.elapsedRealtime()+5000;while(!"true".equals(evalMovie(scenario,"window.clicked===true"))&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(100);
             assertEquals("true",evalMovie(scenario,"window.clicked===true"));
-            key(KeyEvent.KEYCODE_BACK);scenario.onActivity(activity->{assertFalse(((TvPointer)field(activity,"pointer")).active());assertFalse(activity.isFinishing());find(activity.getWindow().getDecorView(),"Widok filmu").performClick();});
+            scenario.onActivity(activity->{activity.onBackPressed();assertFalse(((TvPointer)field(activity,"pointer")).active());assertFalse(activity.isFinishing());find(activity.getWindow().getDecorView(),"Kursor").performClick();});
+            scenario.onActivity(activity->{
+                TvPointer cursor=(TvPointer)field(activity,"pointer");Button close=(Button)field(cursor,"close");android.graphics.Rect rect=new android.graphics.Rect();assertTrue(close.getGlobalVisibleRect(rect));int[] root=new int[2];activity.getWindow().getDecorView().getLocationOnScreen(root);
+                float tx=rect.centerX()-root[0],ty=rect.centerY()-root[1];
+                for(int n=0;n<150;n++){float px=(Float)field(cursor,"x"),py=(Float)field(cursor,"y");int direction=Math.abs(px-tx)>TvUi.dp(activity,8)?(px<tx?KeyEvent.KEYCODE_DPAD_RIGHT:KeyEvent.KEYCODE_DPAD_LEFT):Math.abs(py-ty)>TvUi.dp(activity,8)?(py<ty?KeyEvent.KEYCODE_DPAD_DOWN:KeyEvent.KEYCODE_DPAD_UP):0;if(direction==0)break;activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,direction));}
+                int[] webPosition=new int[2];((WebView)field(activity,"web")).getLocationOnScreen(webPosition);assertTrue("Cursor must escape the WebView to reach its close control",(Float)field(cursor,"y")<webPosition[1]);
+                activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_CENTER));activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_DPAD_CENTER));
+            });
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            scenario.onActivity(activity->{assertFalse("Visible exit must turn the cursor off",((TvPointer)field(activity,"pointer")).active());find(activity.getWindow().getDecorView(),"Widok filmu").performClick();});
             end=android.os.SystemClock.elapsedRealtime()+10000;AtomicReference<Boolean> full=new AtomicReference<>(false);do{scenario.onActivity(activity->full.set((Boolean)field(activity,"playerFullscreen")));if(full.get())break;android.os.SystemClock.sleep(100);}while(android.os.SystemClock.elapsedRealtime()<end);assertTrue(full.get());
+            key(KeyEvent.KEYCODE_MENU);scenario.onActivity(activity->{assertTrue(((TvPointer)field(activity,"pointer")).active());activity.onBackPressed();assertFalse(((TvPointer)field(activity,"pointer")).active());assertTrue("Hiding cursor must preserve fullscreen",(Boolean)field(activity,"playerFullscreen"));});
             key(KeyEvent.KEYCODE_DPAD_LEFT);key(KeyEvent.KEYCODE_DPAD_RIGHT);key(KeyEvent.KEYCODE_DPAD_CENTER);
             assertEquals("[\"back\",\"forward\",\"toggle\"]",new org.json.JSONTokener(evalMovie(scenario,"JSON.stringify(window.commands)")).nextValue());
             key(KeyEvent.KEYCODE_DPAD_UP);scenario.onActivity(activity->{assertFalse((Boolean)field(activity,"playerFullscreen"));assertTrue(find(activity.getWindow().getDecorView(),"Widok filmu").hasFocus());});
+        }
+    }
+
+    @Test public void webCodeEnteredThroughCursorSubmitsWithImeDone() throws Exception {
+        android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();String url="https://vider.info/vid/+fwebcodetest";
+        String html="<!doctype html><html><body><form id='gate'><img id='captcha' alt='kod' style='height:60px'><input id='code' name='captcha_code' style='position:fixed;top:40%;left:10%;width:80%;height:20%'><button type='button' onclick=\"window.count=(window.count||0)+1;window.sent=document.getElementById('code').value;document.getElementById('gate').style.display='none';var p=document.createElement('div');p.className='video-frame';p.innerHTML='<video></video>';document.body.appendChild(p);\">Wchodzę</button></form></body></html>";
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(new Intent(context,MainActivity.class).setAction(Intent.ACTION_VIEW).setData(android.net.Uri.parse(url)))){
+            scenario.onActivity(a->{WebView web=(WebView)field(a,"web");web.stopLoading();android.webkit.WebViewClient original=web.getWebViewClient();web.setWebViewClient(new android.webkit.WebViewClient(){
+                @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView v,android.webkit.WebResourceRequest r){return new android.webkit.WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream(html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+                @Override public void onPageStarted(WebView v,String u,android.graphics.Bitmap icon){original.onPageStarted(v,u,icon);}
+                @Override public void onPageFinished(WebView v,String u){original.onPageFinished(v,u);}
+            });web.loadUrl(url+"?fixture=webcode");});
+            AtomicReference<Boolean> ready=new AtomicReference<>(false);long end=android.os.SystemClock.elapsedRealtime()+15000;
+            do{scenario.onActivity(a->ready.set(((View)field(a,"codeRow")).getVisibility()==View.VISIBLE));if(ready.get())break;android.os.SystemClock.sleep(100);}while(android.os.SystemClock.elapsedRealtime()<end);assertTrue("Code view missing",ready.get());
+            // Focus the same HTML editor that a cursor click selects; type through its real InputConnection.
+            evalMovie(scenario,"document.getElementById('code').focus()");
+            scenario.onActivity(a->{((WebView)field(a,"web")).requestFocus();});
+            android.os.SystemClock.sleep(200);
+            AtomicReference<android.view.inputmethod.InputConnection> connection=new AtomicReference<>();
+            scenario.onActivity(a->{android.view.inputmethod.EditorInfo info=new android.view.inputmethod.EditorInfo();connection.set(((WebView)field(a,"web")).onCreateInputConnection(info));assertNotNull(connection.get());assertEquals(android.view.inputmethod.EditorInfo.IME_ACTION_DONE,info.imeOptions&android.view.inputmethod.EditorInfo.IME_MASK_ACTION);});
+            android.view.inputmethod.InputConnection ic=connection.get();android.os.Handler handler=ic.getHandler();Runnable type=()->ic.commitText("TV42",1);if(handler!=null)handler.post(type);else scenario.onActivity(a->type.run());
+            end=android.os.SystemClock.elapsedRealtime()+5000;while(!"\"TV42\"".equals(evalMovie(scenario,"document.getElementById('code').value"))&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(100);
+            assertEquals("\"TV42\"",evalMovie(scenario,"document.getElementById('code').value"));
+            Runnable done=()->ic.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);if(handler!=null)handler.post(done);else scenario.onActivity(a->done.run());
+            end=android.os.SystemClock.elapsedRealtime()+10000;while(!"\"TV42\"".equals(evalMovie(scenario,"window.sent||''"))&&android.os.SystemClock.elapsedRealtime()<end)android.os.SystemClock.sleep(100);
+            assertEquals("\"TV42\"",evalMovie(scenario,"window.sent||''"));assertEquals("1",evalMovie(scenario,"window.count"));
+            end=android.os.SystemClock.elapsedRealtime()+10000;do{scenario.onActivity(a->ready.set((Boolean)field(a,"playerFullscreen")));if(ready.get())break;android.os.SystemClock.sleep(100);}while(android.os.SystemClock.elapsedRealtime()<end);assertTrue("Film must enter fullscreen after manual code confirmation",ready.get());
         }
     }
 }

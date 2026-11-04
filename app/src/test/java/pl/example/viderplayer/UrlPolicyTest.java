@@ -74,4 +74,13 @@ public final class UrlPolicyTest {
         assertEquals("other", UrlPolicy.pageKind("not a URL"));
         assertEquals("[omitted]", UrlPolicy.redact("chrome-error://chromewebdata/private"));
     }
+    @org.junit.Test public void playbackAllowsOnlyMovieOrSameServiceEmbed(){
+        org.junit.Assert.assertTrue(UrlPolicy.playback("https://vider.pl/embed/video/xn8nev","https://vider.info/vid/+fxn8nev"));
+        org.junit.Assert.assertTrue(UrlPolicy.playback("https://freedisc.pl/embed/f-123","https://freedisc.pl/user,f-123,film-mp4"));
+        org.junit.Assert.assertFalse(UrlPolicy.playback("https://vider.info/embed/video/test",null));
+        org.junit.Assert.assertFalse(UrlPolicy.playback("https://vider.info/", "https://vider.info/vid/+ftest"));
+        org.junit.Assert.assertFalse(UrlPolicy.playback("https://vider.info/embed/video/test", "https://freedisc.pl/user,f-123,film-mp4"));
+        org.junit.Assert.assertFalse(UrlPolicy.playback("https://vider.info.evil.test/embed/video/test","https://vider.info/vid/+ftest"));
+    }
 }
+

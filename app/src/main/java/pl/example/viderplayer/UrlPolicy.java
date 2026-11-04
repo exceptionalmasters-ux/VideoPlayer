@@ -27,6 +27,12 @@ public final class UrlPolicy {
         }
         catch (RuntimeException e) { return false; }
     }
+    public static boolean playback(String value,String selectedMovie) {
+        if(isMovie(value))return true;
+        if(!allowed(value)||!isMovie(selectedMovie)||!sameService(value,selectedMovie))return false;
+        String path=URI.create(value).getPath();
+        return SiteSource.fromUrl(value)==SiteSource.VIDER?path.matches("/embed/video/[A-Za-z0-9]+/?"):path.matches("/embed(?:/|,)[^?#]*");
+    }
     public static boolean isHome(String value) {
         if (!allowed(value)) return false;
         String path = URI.create(value).getPath();
@@ -91,3 +97,4 @@ public final class UrlPolicy {
         } catch (RuntimeException e) { return "[omitted]"; }
     }
 }
+

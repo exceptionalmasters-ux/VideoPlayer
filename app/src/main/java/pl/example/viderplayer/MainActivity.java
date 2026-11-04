@@ -69,6 +69,7 @@ public final class MainActivity extends Activity {
     private Button tvControlsAnchor;
     private TvPointer pointer;
     private boolean movieFocused;
+    private boolean accessRequired;
     private LinearLayout tvControls;
     private void wirePlayerNavigation(){
         if(!television||web==null||tvControls==null)return;
@@ -182,7 +183,7 @@ public final class MainActivity extends Activity {
         if(!television)button(codeRow,"Wstaw kod",this::insertVerificationCode);
         if(television)button(codeRow,"Zatwierdź",()->insertVerificationCode(true));
         content.addView(codeRow);
-        web = new WebView(this);
+        web = new TvWebView(this);
         content.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         fullscreenControls=new Button(this);
         fullscreenControls.setText("☰");
@@ -262,7 +263,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
-                loadFailed = false;movieFocused=false;if(pointer!=null)pointer.stop();
+                loadFailed = false;movieFocused=false;accessRequired=false;if(pointer!=null)pointer.stop();
                 if(UrlPolicy.isMovie(url))library.opened(url,MovieLibrary.key(url).equals(launchMovieKey)?launchMovieTitle:"",MovieLibrary.key(url).equals(launchMovieKey)?launchMovieThumbnail:"");
                 if(playerFullscreen)exitPlayerFullscreen(false);
                 presentation.navigation();
@@ -408,7 +409,7 @@ public final class MainActivity extends Activity {
             String stage="results";
             try{stage=new JSONObject((String)new JSONTokener(value).nextValue()).optString("stage","results");}
             catch(Exception ignored){ }
-            final boolean blocked=!"results".equals(stage);
+            final boolean blocked=!"results".equals(stage);accessRequired=blocked;
             if(blocked){
                 presentation.accessBlocked();
                 if(playerFullscreen)exitPlayerFullscreen(false);
@@ -426,8 +427,9 @@ public final class MainActivity extends Activity {
                 web.evaluateJavascript(script("verification-layout.js"),visible->{
                     if(!currentPresentation(generation,scan))return;
                     setCodeVisible("true".equals(visible));
-                    if(presentation.shouldEnter()&&UrlPolicy.isMovie(web.getUrl())&&attempt<60)
+                    if(presentation.shouldEnter()&&UrlPolicy.playback(web.getUrl(),movieNavigation.target()))
                         enterPlayerFullscreen(generation,true);
+                    else if(playerFullscreen)web.evaluateJavascript("window.__vpEnsurePlayerFocus ? window.__vpEnsurePlayerFocus() : 'missing'",null);
                     schedulePresentation(generation,scan,attempt,false);
                 });
             }
@@ -435,24 +437,26 @@ public final class MainActivity extends Activity {
     }
     private void schedulePresentation(int generation,int scan,int attempt,boolean blocked){
         if(!currentPresentation(generation,scan))return;
-        if(attempt==60&&presentation.shouldEnter()&&UrlPolicy.isMovie(web.getUrl())&&!blocked){
+        if(attempt==60&&presentation.shouldEnter()&&UrlPolicy.playback(web.getUrl(),movieNavigation.target())&&!blocked){
             diagnostics.add("presentation.player_not_ready",web.getUrl(),0);
-            status.setText("Nie wykryto gotowego odtwarzacza. Możesz otworzyć widok filmu ręcznie.");
+            status.setText("Czekam na odtwarzacz. Widok filmu włączy się, gdy będzie gotowy.");
         }
-        if(blocked||playerFullscreen||presentation.shouldEnter()&&attempt<60||attempt<10){
+        if(blocked||playerFullscreen||presentation.shouldEnter()||attempt<10){
             int nextAttempt=blocked?0:attempt+1;
-            sessionHandler.postDelayed(()->inspectPresentation(generation,scan,nextAttempt),1500);
+            sessionHandler.postDelayed(()->inspectPresentation(generation,scan,nextAttempt),attempt<60?1500:3000);
         }
     }
     private void setCodeVisible(boolean visible) {
+        if(television)((TvWebView)web).codePage(visible,this::submitPageCode);
         if (visible == (codeRow.getVisibility() == View.VISIBLE)) return;
         codeRow.setVisibility(visible ? View.VISIBLE : View.GONE);
         web.getSettings().setUseWideViewPort(!visible);
         web.getSettings().setLoadWithOverviewMode(!visible);
         wirePlayerNavigation();
         if (visible) {
-            movieFocused=false;if(pointer!=null)pointer.stop();
+            movieFocused=false;
             diagnostics.add("verification.open", web.getUrl(), 0);
+            if(pointer!=null&&pointer.active())return;
             if(television)codeInput.setShowSoftInputOnFocus(true);
             codeInput.requestFocus();
             codeInput.post(() -> {
@@ -473,9 +477,21 @@ public final class MainActivity extends Activity {
         web.evaluateJavascript(script("verification-fill.js").replace("__VP_MANUAL_CODE__",JSONObject.quote(code)), value -> {
             if ("true".equals(value)) {
                 ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(codeInput.getWindowToken(),0);
-                if(submit)web.evaluateJavascript(script("verification-submit.js"),sent->toast("true".equals(sent)?"Kod zatwierdzony przyciskiem serwisu.":"Nie znaleziono przycisku. Wybierz Strona i zatwierdź kod na stronie."));
+                if(submit)submitPageCode();
                 else toast("Kod wstawiony. Użyj przycisku na stronie, aby go zatwierdzić.");
             } else toast("Nie znaleziono pola kodu na stronie.");
+        });
+    }
+    private void submitPageCode(){
+        if(!allowed(web.getUrl())||codeRow.getVisibility()!=View.VISIBLE)return;
+        web.evaluateJavascript(script("verification-submit.js"),sent->{
+            if(!alive)return;
+            if("true".equals(sent)){
+                if(pointer!=null)pointer.stop();
+                ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(web.getWindowToken(),0);
+                presentation.navigation();inspectVerification(pageGeneration,0);
+                diagnostics.add("verification.page_confirmed",web.getUrl(),0);
+            }else toast("Nie znaleziono wpisanego kodu i przycisku Wchodzę na stronie.");
         });
     }
     private void tvCommand(String action) {
@@ -492,7 +508,7 @@ public final class MainActivity extends Activity {
         if(!alive||!resumed||generation!=pageGeneration||!allowed(web.getUrl())||playerFullscreen)return;
         if(automatic&&!presentation.shouldEnter())return;
         if(codeRow.getVisibility()==View.VISIBLE){if(!automatic)toast("Najpierw dokończ weryfikację kodu.");return;}
-        String focus="document.getElementById('vp-focus-style') ? 'player' : "+script("focus-player.js");
+        String focus="window.__vpEnsurePlayerFocus ? window.__vpEnsurePlayerFocus() : "+script("focus-player.js");
         web.evaluateJavascript(focus,value->{
             if(!alive||!resumed||generation!=pageGeneration||playerFullscreen||automatic&&!presentation.shouldEnter())return;
             if(!"\"player\"".equals(value)){if(!automatic)toast("Najpierw uruchom film na stronie.");return;}
@@ -583,7 +599,8 @@ public final class MainActivity extends Activity {
         boolean on=pointer.toggle();toast(on?"Kursor: strzałki przesuwają · OK klika · Wstecz wyłącza":"Kursor wyłączony");
     }
     private void showOriginalPage(){
-        if(pointer!=null)pointer.stop();exitFullscreen();exitPlayerFullscreen();movieFocused=false;
+        boolean temporary=accessRequired||codeRow.getVisibility()==View.VISIBLE||presentation.shouldEnter()&&!movieFocused;
+        if(pointer!=null)pointer.stop();exitFullscreen();exitPlayerFullscreen(false);if(!temporary)presentation.userControlled();movieFocused=false;
         web.evaluateJavascript("(function(){if(!document.getElementById('vp-focus-style'))return 'page';return "+script("focus-player.js")+"}())",value->{
             web.getSettings().setUseWideViewPort(true);web.getSettings().setLoadWithOverviewMode(true);web.requestFocus();
             status.setText("Pełna strona · Menu włącza kursor pilota");
@@ -701,6 +718,7 @@ public final class MainActivity extends Activity {
         if (callback != null) callback.onCustomViewHidden();
     }
     @Override public void onBackPressed() {
+        if(pointer!=null&&pointer.active()){pointer.stop();return;}
         if(customView!=null){exitFullscreen();if(playerFullscreen)exitPlayerFullscreen();else presentation.userControlled();}
         else if(playerFullscreen)exitPlayerFullscreen();
         else if(television)finish();

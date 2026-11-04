@@ -183,3 +183,11 @@ Zatwierdzenie wpisanego tytułu przyciskiem klawiatury Szukaj/Gotowe lub Enter u
 Podczas filmu OK przełącza pauzę/odtwarzanie, Lewo/Prawo przewija o 10 sekund, a Góra/Dół lub Wstecz pokazuje pasek aplikacji. Pasek TV nie ma osobnych przycisków Play/Pauza i ±10 sekund. Ulubione, historia, odświeżanie i diagnostyka są dostępne z przycisku Opcje; ★ dodaje/usuwa ulubiony film.
 
 Opcjonalny **Kursor** (również Menu podczas filmu lub potwierdzenia dostępu) pokazuje celownik nad stroną: strzałki przesuwają, OK klika w wybrane miejsce, a Wstecz/Menu wyłącza kursor i przywraca sterowanie przyciskami. To lokalny wskaźnik wewnątrz aplikacji, bez dodatkowych uprawnień systemowych. Kod z obrazka wpisuje użytkownik w podświetlonym polu; Zatwierdź wysyła go przyciskiem oryginalnej strony.
+
+## TV 0.7.2 — kursor, kod i pełny ekran
+
+Kursor porusza się 2× szybciej i obejmuje całe okno aplikacji, w tym pasek nad filmem. Gdy jest włączony, w prawym górnym rogu pojawia się Wyłącz kursor. Wstecz wyłącza wskaźnik przed wyjściem z filmu, również gdy system wywołuje bezpośrednio obsługę Wstecz.
+
+Klawiatura TV dla pola kodu wewnątrz strony otrzymuje akcję Gotowe. Po ręcznym wpisaniu kodu akcja ta wywołuje przycisk potwierdzenia oryginalnego formularza; nie rozpoznaje ani nie wpisuje kodu automatycznie. Pola niebędące polem kodu zachowują standardową obsługę WebView.
+
+Widok filmu rozpoznaje również zaufaną stronę embed wybranego filmu i czeka na późno doładowany odtwarzacz po upływie wcześniejszego limitu. Przy wymianie kontenera odtwarzacza w bieżącym dokumencie ponownie ustawia jego układ bez wyjścia z pełnego ekranu. Tymczasowy widok formularza nie wyłącza automatycznej prezentacji po zatwierdzeniu kodu. Widok obrazka reaguje na zmianę rozmiaru okna i późniejsze doładowanie grafiki.

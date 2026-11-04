@@ -1,5 +1,12 @@
-(function () {
+(function focusPlayer() {
   'use strict';
+  if(typeof window!=='undefined')window.__vpEnsurePlayerFocus=function(){
+    const focused=document.querySelector('[data-vp-player]');
+    const styled=document.getElementById('vp-focus-style');
+    if(styled&&focused&&focused.isConnected!==false&&containsMedia(focused))return 'player';
+    if(styled)focusPlayer();
+    return focusPlayer();
+  };
   const old = document.getElementById('vp-focus-style');
   if (old) {
     old.remove();
@@ -31,7 +38,7 @@
       try {
         const address = new URL(frame.src, location.href);
         return address.protocol === 'https:' && !address.username && !address.password && !address.port && ['freedisc.pl','www.freedisc.pl','stream.freedisc.pl',
-          'stream2.freedisc.pl','ovh.freedisc.pl'].includes(address.hostname) && /^\/embed(?:\/|,)/.test(address.pathname);
+          'stream2.freedisc.pl','ovh.freedisc.pl','vider.pl','www.vider.pl','vider.info','www.vider.info'].includes(address.hostname) && /^\/embed(?:\/|,)/.test(address.pathname);
       } catch (_) { return false; }
     });
   }
@@ -91,3 +98,4 @@
   document.head.appendChild(style);
   return 'player';
 }());
+

@@ -157,7 +157,7 @@ public final class SearchActivity extends Activity {
         root.addView(status);
         FrameLayout workspace = new FrameLayout(this);
         root.addView(workspace, new LinearLayout.LayoutParams(-1, 0, 1));
-        engine = new WebView(this);
+        engine = new TvWebView(this);
         engineHost = new FrameLayout(this);
         workspace.addView(engineHost, new FrameLayout.LayoutParams(-1, -1));
         engineHost.addView(engine, new FrameLayout.LayoutParams(-1, -1));
@@ -552,6 +552,7 @@ public final class SearchActivity extends Activity {
             dismissVerification();
         }
         verificationStage = stage;
+        if(television)((TvWebView)engine).codePage("verification".equals(stage),this::submitPageCode);
         android.view.ViewGroup parent = (android.view.ViewGroup) engine.getParent();
         if (parent != null) parent.removeView(engine);
         searchContent.setVisibility(View.GONE);
@@ -612,7 +613,7 @@ public final class SearchActivity extends Activity {
             engine.getSettings().setUseWideViewPort(false);
             engine.getSettings().setLoadWithOverviewMode(false);
             engine.evaluateJavascript(asset("verification-layout.js"), null);
-            engine.postDelayed(()->{if(verificationCode!=null&&verificationCode.length()==0)showVerificationKeyboard();},250);
+            engine.postDelayed(()->{if(verificationCode!=null&&verificationCode.length()==0&&(pointer==null||!pointer.active()))showVerificationKeyboard();},250);
         }
     }
     private void showVerificationKeyboard() {
@@ -641,6 +642,16 @@ public final class SearchActivity extends Activity {
                 boolean shown = input.showSoftInput(engine, InputMethodManager.SHOW_IMPLICIT);
                 diagnostics.add("search.keyboard_requested", null, shown ? 1 : 0);
             }, 200);
+        });
+    }
+    private void submitPageCode(){
+        if(!active||verificationPanel==null||!UrlPolicy.allowed(engine.getUrl()))return;
+        engine.evaluateJavascript(asset("verification-submit.js"),sent->{
+            if("true".equals(sent)){
+                if(pointer!=null)pointer.stop();
+                ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(engine.getWindowToken(),0);
+                diagnostics.add("search.page_code_confirmed",engine.getUrl(),0);retryInspection();
+            }else Toast.makeText(this,"Wpisz kod z obrazka przed zatwierdzeniem.",Toast.LENGTH_SHORT).show();
         });
     }
     private void applyVerificationCode() { applyVerificationCode(false); }
@@ -679,6 +690,7 @@ public final class SearchActivity extends Activity {
     private void dismissVerification() {
         if (verificationPanel == null) return;
         if(pointer!=null)pointer.stop();
+        if(television)((TvWebView)engine).codePage(false,null);
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(engine.getWindowToken(), 0);
         android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
         if (owner != null) owner.removeView(engine);
@@ -712,6 +724,7 @@ public final class SearchActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
     @Override public void onBackPressed() {
+        if(pointer!=null&&pointer.active()){pointer.stop();return;}
         if (verificationPanel != null) cancelVerification();
         else super.onBackPressed();
     }

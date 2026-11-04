@@ -32,7 +32,8 @@ public final class AutomaticPresentationTest {
         Intent intent=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(URL));
         return ActivityScenario.launch(intent);
     }
-    private static void load(ActivityScenario<MainActivity> scenario,String body){
+    private static void load(ActivityScenario<MainActivity> scenario,String body){loadAt(scenario,body,URL);}
+    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination){
         final String html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body data-vp-test='presentation'>"+body+"</body></html>";
         scenario.onActivity(activity->{
             WebView web=web(activity);web.stopLoading();
@@ -42,7 +43,7 @@ public final class AutomaticPresentationTest {
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap bitmap){original.onPageStarted(view,url,bitmap);}
                 @Override public void onPageFinished(WebView view,String url){original.onPageFinished(view,url);}
             });
-            web.loadUrl(URL+"?fixture="+java.util.UUID.randomUUID());
+            web.loadUrl(destination+"?fixture="+java.util.UUID.randomUUID());
         });
         long loaded=SystemClock.elapsedRealtime()+15000;
         while(!"true".equals(eval(scenario,"!!document.querySelector('body[data-vp-test=presentation]')"))){
@@ -98,4 +99,34 @@ public final class AutomaticPresentationTest {
             await(scenario,activity->(Boolean)field(activity,"playerFullscreen")&&((View)field(activity,"codeRow")).getVisibility()==View.GONE,"Presentation did not resume after the local challenge was removed");
         }
     }
+
+    @Test public void sameServiceEmbedOpensFullscreen(){
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            loadAt(scenario,PLAYER,"https://vider.pl/embed/video/test");
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Embed navigation did not enter fullscreen");
+        }
+    }
+    @Test public void replacementPlayerKeepsFilmFocus(){
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            load(scenario,PLAYER);
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Initial presentation missing");
+            eval(scenario,"document.body.innerHTML="+org.json.JSONObject.quote("<div class='video-frame' id='replacement'><video></video></div><p>Other page content</p>"));
+            long end=SystemClock.elapsedRealtime()+10000;String focused;
+            do{focused=eval(scenario,"!!document.querySelector('#replacement[data-vp-player]')");if("true".equals(focused))break;SystemClock.sleep(100);}while(SystemClock.elapsedRealtime()<end);
+            assertEquals("true",focused);scenario.onActivity(a->assertTrue((Boolean)field(a,"playerFullscreen")));
+        }
+    }
+    @Test public void delayedPlayerIsStillDetectedAfterTheOldTimeout(){
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            load(scenario,"<p>Waiting for player</p>");
+            scenario.onActivity(a->{try{
+                ((android.os.Handler)field(a,"sessionHandler")).removeCallbacksAndMessages(null);
+                java.lang.reflect.Field scan=a.getClass().getDeclaredField("presentationScan");scan.setAccessible(true);scan.setInt(a,((Integer)scan.get(a))+1);
+            }catch(Exception e){throw new AssertionError(e);}});
+            eval(scenario,"document.body.innerHTML="+org.json.JSONObject.quote("<div class='video-frame'><video></video></div>"));
+            scenario.onActivity(a->{try{java.lang.reflect.Method m=a.getClass().getDeclaredMethod("inspectPresentation",int.class,int.class,int.class);m.setAccessible(true);m.invoke(a,(Integer)field(a,"pageGeneration"),(Integer)field(a,"presentationScan"),61);}catch(Exception e){throw new AssertionError(e);}});
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Player wait stopped after old timeout");
+        }
+    }
 }
+

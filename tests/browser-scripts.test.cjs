@@ -337,3 +337,14 @@ test('presentation detects a later challenge in branches hidden by film focus an
   const result=JSON.parse(vm.runInNewContext(asset('search-state.js'),{document,getComputedStyle:()=>({visibility:'visible'})}));
   assert.equal(result.stage,'verification');assert.equal(hidden,true);
 });
+
+
+
+test('offscreen password templates do not block movie presentation', () => {
+  const password={type:'password',id:'login-password',getAttribute:()=>'',getBoundingClientRect:()=>({height:30,top:-2000,bottom:-1970,left:0,right:200})};
+  const document={querySelectorAll: selector=>selector==='input'?[password]:[]};
+  const context={document,window:{innerHeight:600,innerWidth:1000},getComputedStyle:()=>({visibility:'visible'})};
+  assert.equal(JSON.parse(vm.runInNewContext(asset('search-state.js'),context)).stage,'results');
+  password.getBoundingClientRect=()=>({height:30,top:20,bottom:50,left:0,right:200});
+  assert.equal(JSON.parse(vm.runInNewContext(asset('search-state.js'),context)).stage,'login');
+});
