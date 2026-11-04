@@ -98,7 +98,7 @@ final class ThumbnailLoader {
                 connection.setReadTimeout(8000);
                 connection.setRequestProperty("User-Agent", userAgent);
                 if (!image && UrlPolicy.allowed(referrer)) connection.setRequestProperty("Referer", referrer);
-                // Credentials go only to the matching Vider origin. Never forward them to image hosts.
+                // Credentials go only to the matching service origin. Never forward them to image hosts.
                 if (!image) {
                     String cookie = CookieManager.getInstance().getCookie(address);
                     if (cookie != null) connection.setRequestProperty("Cookie", cookie);

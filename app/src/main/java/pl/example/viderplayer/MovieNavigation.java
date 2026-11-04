@@ -9,7 +9,7 @@ public final class MovieNavigation {
     public void restore(String url, boolean retryUsed) { select(url); retried = retryUsed; }
     public boolean retryUsed() { return retried; }
     public String retryFrom(String current, boolean consentVisible) {
-        if (target == null || retried || consentVisible || !UrlPolicy.isHome(current)) return null;
+        if (target == null || retried || consentVisible || !UrlPolicy.isHome(current) || !UrlPolicy.sameService(current, target)) return null;
         retried = true;
         return target;
     }

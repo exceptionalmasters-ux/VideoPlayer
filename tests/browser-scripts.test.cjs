@@ -63,22 +63,28 @@ test('focus preserves the loaded frame and restores the full page', () => {
 });
 
 test('focus does nothing when no player exists', () => {
-  const document = {getElementById: () => null, querySelector: () => null};
+  const document = {getElementById: () => null, querySelector: () => null, querySelectorAll: () => []};
   assert.equal(vm.runInNewContext(asset('focus-player.js'), {document}), 'missing');
 });
 
-function searchFixture(entries) {
+function searchFixture(entries, base = "https://vider.info/search/all/movie") {
   const anchors = entries.map(entry => ({
     textContent: entry.text || '',
-    getAttribute(name) { return name === 'href' ? entry.href : (name === 'aria-label' ? entry.label : null); },
+    getAttribute(name) { return name === 'href' ? entry.href : (name === 'title' ? entry.title : (name === 'aria-label' ? entry.label : null)); },
+    closest() { return {querySelector(selector) {
+      if (selector === 'img') return entry.lazy ? {src:'/loader.gif',getAttribute:() => entry.lazy} : null;
+      if (selector.startsWith('.thumb')) return entry.background ? {getAttribute:() => 'background:url("'+entry.background+'")'} : null;
+      if (selector.startsWith('.file_icon')) return entry.videoIcon ? {} : null;
+      return null;
+    }}; },
     querySelector(selector) {
-      if (selector === 'img') return entry.image ? {src: entry.image} : null;
+      if (selector === 'img') return entry.image ? {src: entry.image, getAttribute: name => name === 'data-src' ? entry.lazy : null} : null;
       return entry.heading ? {textContent: entry.heading} : null;
     }
   }));
   return JSON.parse(vm.runInNewContext(asset('search-results.js'), {
-    document: {querySelectorAll: () => anchors},
-    location: {href: 'https://vider.info/search/all/movie'}, URL
+    document: {querySelector: () => null, querySelectorAll: () => anchors},
+    location: {href: base}, URL
   }));
 }
 test('search extracts native movie cards from current and legacy Vider links, deduplicating domains', () => {
@@ -185,4 +191,56 @@ test('manual verification does not write into hidden or unrelated inputs', () =>
   assert.equal(vm.runInNewContext(asset('verification-fill.js').replace('__VP_MANUAL_CODE__','"test"'),
     {document:{querySelectorAll:()=>[unrelated,hidden]},Event:class{}}),false);
   assert.equal(unrelated.value,'unchanged');assert.equal(hidden.value,'unchanged');
+});
+
+
+test('Freedisc cards use observed file URLs and lazy posters; ignore audio, documents and directories', () => {
+  const result = searchFixture([
+    {href:'/margot223,f-19724546,ronin-1998-mp4', title:'Ronin (1998).mp4', lazy:'https://img.freedisc.pl/photo/19724546/7/2/ronin.png'},
+    {href:'https://www.freedisc.pl/margot223,f-19724546,ronin-1998-mp4', title:'Duplicate.mp4'},
+    {href:'/someone,f-22,audio-mp3', title:'Music.mp3', lazy:'https://img.freedisc.pl/photo/22/6/2/audio.png'},
+    {href:'/someone,f-23,document-pdf', title:'Document.pdf'},
+    {href:'/someone,d-24,folder', title:'Folder'},
+    {href:'https://freedisc.pl.evil.test/user,f-25,movie-mp4', title:'Wrong.mp4'},
+    {href:'https://user:pass@freedisc.pl/user,f-26,movie-mp4', title:'Credentials.mp4'},
+    {href:'https://freedisc.pl:444/user,f-27,movie-mp4', title:'Port.mp4'}
+  ], 'https://freedisc.pl/search/all/Ronin');
+  assert.equal(result.length, 1);
+  assert.equal(result[0].url, 'https://freedisc.pl/margot223,f-19724546,ronin-1998-mp4');
+  assert.equal(result[0].title, 'Ronin (1998).mp4');
+  assert.equal(result[0].thumbnail, 'https://img.freedisc.pl/photo/19724546/7/2/ronin.png');
+});
+test('Freedisc home-style cards read CSS posters and file type icons without inventing URLs', () => {
+  const result = searchFixture([
+    {href:'/user,f-30,a-title', title:'A title', background:'https://img.freedisc.pl/photo/30/7/2/a.png'},
+    {href:'/user,f-31,another', title:'Another', videoIcon:true}
+  ], 'https://freedisc.pl/search/all/title');
+  assert.equal(result.length, 2);
+  assert.equal(result[0].thumbnail, 'https://img.freedisc.pl/photo/30/7/2/a.png');
+  assert.equal(result[1].thumbnail, '');
+});
+
+test('focus selects an existing Freedisc embed frame and preserves it on restore', () => {
+  function element(tagName) {
+    const attrs=new Set();
+    return {tagName,children:[],parentElement:null,querySelector:()=>null,
+      setAttribute:k=>attrs.add(k),removeAttribute:k=>attrs.delete(k),hasAttribute:k=>attrs.has(k),
+      appendChild(n){this.children.push(n);n.parentElement=this;},
+      remove(){this.parentElement.children=this.parentElement.children.filter(n=>n!==this);}};
+  }
+  const body=element('BODY'), head=element('HEAD'), frame=element('IFRAME'), comments=element('DIV');
+  frame.src='https://freedisc.pl/embed/video/19724546/ronin';
+  body.appendChild(frame); body.appendChild(comments);
+  const nodes=[body,head,frame,comments];
+  const document={body,head,createElement:element,querySelector:()=>null,
+    getElementById:id=>head.children.find(n=>n.id===id),
+    querySelectorAll:s=>s==='iframe[src]'?[frame]:nodes};
+  const context={document,URL,location:{href:'https://freedisc.pl/user,f-19724546,ronin-mp4'}};
+  assert.equal(vm.runInNewContext(asset('focus-player.js'),context),'player');
+  assert.equal(frame.hasAttribute('data-vp-player'),true);
+  assert.equal(comments.hasAttribute('data-vp-hidden'),true);
+  assert.equal(vm.runInNewContext(asset('focus-player.js'),context),'page');
+  assert.equal(frame.src,'https://freedisc.pl/embed/video/19724546/ronin');
+  assert.equal(body.children[0],frame);
+  assert.equal(comments.hasAttribute('data-vp-hidden'),false);
 });

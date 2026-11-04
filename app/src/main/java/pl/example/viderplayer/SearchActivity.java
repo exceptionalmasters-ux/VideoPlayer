@@ -51,6 +51,8 @@ public final class SearchActivity extends Activity {
     private boolean searchReturnUsed;
     private long lastSearchAt;
     private int lastHttpError;
+    private Spinner sourcePicker;
+    private SiteSource selectedSource = SiteSource.VIDER;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle saved) {
@@ -75,12 +77,24 @@ public final class SearchActivity extends Activity {
         TextView caption = text("Znajdź film i dotknij miniatury", 14, Color.LTGRAY);
         caption.setPadding(dp(16), 0, dp(16), dp(14));
         root.addView(caption);
+        selectedSource = SiteSource.restore(saved != null ? saved.getString("source")
+            : getSharedPreferences("sources", MODE_PRIVATE).getString("selected", SiteSource.VIDER.name()));
+        LinearLayout sourceRow = new LinearLayout(this);
+        sourceRow.setPadding(dp(16), 0, dp(16), 0);
+        sourceRow.setGravity(Gravity.CENTER_VERTICAL);
+        sourceRow.addView(text("Źródło: ", 14, Color.LTGRAY));
+        sourcePicker = new Spinner(this);
+        sourcePicker.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
+            new String[]{SiteSource.VIDER.label, SiteSource.FREEDISC.label}));
+        sourcePicker.setSelection(selectedSource.ordinal());
+        sourceRow.addView(sourcePicker, new LinearLayout.LayoutParams(0, dp(48), 1));
+        root.addView(sourceRow);
         LinearLayout input = new LinearLayout(this);
         input.setPadding(dp(12), 0, dp(12), 0);
         query = new EditText(this);
         query.setSingleLine(true);
         query.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});
-        query.setHint("Tytuł filmu, np. Maverick");
+        query.setHint("Tytuł filmu, np. " + selectedSource.example);
         query.setTextSize(16);
         query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         input.addView(query, new LinearLayout.LayoutParams(0, dp(52), 1));
@@ -123,12 +137,12 @@ public final class SearchActivity extends Activity {
                 if (!request.isForMainFrame()) return !"https".equals(request.getUrl().getScheme());
                 String target = request.getUrl().toString();
                 // A background navigation can never open a movie or launch another app.
-                return !UrlPolicy.allowed(target);
+                return SiteSource.fromUrl(target) != selectedSource;
             }
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 diagnostics.add("search.page", url, 0);
-                if (UrlPolicy.allowed(url)) inspect(++scanToken, 0);
+                if (SiteSource.fromUrl(url) == selectedSource) inspect(++scanToken, 0);
             }
             @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, android.webkit.WebResourceResponse response) {
                 if (request.isForMainFrame()) {
@@ -147,6 +161,12 @@ public final class SearchActivity extends Activity {
             if (action == EditorInfo.IME_ACTION_SEARCH) { search(); return true; }
             return false;
         });
+        sourcePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                selectSource(SiteSource.values()[position]);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) { }
+        });
         if (saved != null) {
             query.setText(saved.getString("query", ""));
             try { results = new JSONArray(saved.getString("results", "[]")); } catch (Exception ignored) { }
@@ -156,6 +176,22 @@ public final class SearchActivity extends Activity {
             if (results.length() > 0) render();
             else if (!query.getText().toString().trim().isEmpty()) search();
         }
+    }
+    private void selectSource(SiteSource source) {
+        if (source == selectedSource) return;
+        ++scanToken;
+        engine.stopLoading();
+        dismissVerification();
+        selectedSource = source;
+        requestedSearch = null;
+        searchReturnUsed = false;
+        lastSearchAt = 0;
+        results = new JSONArray();
+        thumbnails.nextGeneration();
+        grid.removeAllViews();
+        query.setHint("Tytuł filmu, np. " + source.example);
+        getSharedPreferences("sources", MODE_PRIVATE).edit().putString("selected", source.name()).apply();
+        status.setText("Źródło: " + source.label + ". Wpisz tytuł i wybierz Szukaj.");
     }
     private void search() {
         String title = query.getText().toString().trim();
@@ -176,14 +212,14 @@ public final class SearchActivity extends Activity {
         status.setText("Szukam filmów…");
         ++scanToken;
         // Advertised by the site's public /opensearch.xml, not a guessed endpoint.
-        requestedSearch = "https://vider.info/search/all/" + Uri.encode(title);
+        requestedSearch = selectedSource.searchUrl(title);
         searchReturnUsed = false;
         diagnostics.clear();
         diagnostics.add("search.start", requestedSearch, 0);
         engine.loadUrl(requestedSearch);
     }
     private void inspect(int token, int attempt) {
-        if (!active || token != scanToken || !UrlPolicy.allowed(engine.getUrl())) return;
+        if (!active || token != scanToken || SiteSource.fromUrl(engine.getUrl()) != selectedSource) return;
         engine.evaluateJavascript(asset("search-state.js"), value -> {
             if (!active || token != scanToken) return;
             String stage = "results";
@@ -223,9 +259,12 @@ public final class SearchActivity extends Activity {
                     java.util.HashSet<String> seen = new java.util.HashSet<>();
                     for (int i = 0; i < Math.min(input.length(), 24); i++) {
                         JSONObject item = input.optJSONObject(i);
-                        if (item == null || !UrlPolicy.isMovie(item.optString("url"))) continue;
+                        if (item == null || !UrlPolicy.isMovie(item.optString("url"))
+                                || SiteSource.fromUrl(item.optString("url")) != selectedSource) continue;
                         String path = Uri.parse(item.optString("url")).getPath();
-                        String key = path.substring(path.lastIndexOf('+'));
+                        String key = selectedSource == SiteSource.FREEDISC
+                            ? path.substring(path.indexOf(",f-") + 3).split(",")[0]
+                            : path.substring(path.lastIndexOf('+'));
                         if (!seen.add(key)) continue;
                         String name = item.optString("title").replaceAll("[\\p{Cntrl}]", " ").trim();
                         if (name.isEmpty()) continue;
@@ -261,8 +300,8 @@ public final class SearchActivity extends Activity {
         heading.setPadding(dp(16), dp(12), dp(16), dp(4));
         verificationPanel.addView(heading);
         TextView explanation = text("verification".equals(stage)
-            ? "Vider sprawdza dostęp już przy wyszukiwaniu. Wpisz kod w polu aplikacji, wybierz „Wstaw kod”, potem przycisk na stronie."
-            : "Dokończ wymagany przez Vider krok. Potem wrócimy do miniatur.", 13, Color.LTGRAY);
+            ? selectedSource.label + " sprawdza dostęp już przy wyszukiwaniu. Wpisz kod w polu aplikacji, wybierz „Wstaw kod”, potem przycisk na stronie."
+            : "Dokończ wymagany przez " + selectedSource.label + " krok. Potem wrócimy do miniatur.", 13, Color.LTGRAY);
         explanation.setPadding(dp(16), 0, dp(16), dp(8));
         verificationPanel.addView(explanation);
         LinearLayout actions = new LinearLayout(this);
@@ -449,12 +488,12 @@ public final class SearchActivity extends Activity {
     }
     private void pasteLink() {
         EditText input = new EditText(this);
-        input.setHint("https://vider.info/vid/…");
+        input.setHint("Link filmu z Vider lub Freedisc");
         new AlertDialog.Builder(this).setTitle("Otwórz link filmu").setView(input)
             .setPositiveButton("Otwórz", (d, w) -> {
                 String url = input.getText().toString().trim();
                 if (UrlPolicy.isMovie(url)) openMovie(url);
-                else Toast.makeText(this, "Podaj link HTTPS do strony filmu Vider.", Toast.LENGTH_LONG).show();
+                else Toast.makeText(this, "Podaj link HTTPS do filmu z Vider lub Freedisc.", Toast.LENGTH_LONG).show();
             }).setNegativeButton("Anuluj", null).show();
     }
     private String asset(String name) {
@@ -465,6 +504,7 @@ public final class SearchActivity extends Activity {
         } catch (java.io.IOException e) { return "'[]'"; }
     }
     @Override protected void onSaveInstanceState(Bundle out) {
+        out.putString("source", selectedSource.name());
         out.putString("query", query.getText().toString());
         out.putString("requestedSearch", requestedSearch);
         out.putBoolean("searchReturnUsed", searchReturnUsed);

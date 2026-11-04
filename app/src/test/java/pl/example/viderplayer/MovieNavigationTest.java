@@ -26,4 +26,14 @@ public final class MovieNavigationTest {
         navigation.select("https://vider.info/");
         assertNull(navigation.target());
     }
+
+    @Test public void freediscRetryNeverCrossesServices() {
+        MovieNavigation navigation = new MovieNavigation();
+        String movie = "https://freedisc.pl/user,f-19724546,ronin-mp4";
+        navigation.select(movie);
+        assertNull(navigation.retryFrom("https://vider.pl/", false));
+        assertFalse(navigation.retryUsed());
+        assertEquals(movie, navigation.retryFrom("https://www.freedisc.pl/", false));
+        assertNull(navigation.retryFrom("https://freedisc.pl/", false));
+    }
 }

@@ -24,7 +24,7 @@ public final class DiagnosticLog {
         } catch (JSONException ignored) { }
     }
     public synchronized void media(String message, String frameUrl) {
-        if (message == null || message.length() > 4096 || !UrlPolicy.allowed(frameUrl)) return;
+        if (message == null || message.length() > 4096 || !UrlPolicy.mediaOrigin(frameUrl)) return;
         try {
             JSONObject input = new JSONObject(message);
             String type = input.optString("event");

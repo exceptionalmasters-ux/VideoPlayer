@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.*;
 
-/** Local HTML fixture only. No request to Vider and no real CAPTCHA is read or solved. */
+/** Local HTML fixture only. No request to either service and no real CAPTCHA is read or solved. */
 @RunWith(AndroidJUnit4.class)
 @SdkSuppress(minSdkVersion = 30)
 public final class VerificationKeyboardTest {
@@ -31,10 +31,20 @@ public final class VerificationKeyboardTest {
         catch (Exception e) { throw new AssertionError(e); }
     }
     private static WebView engine(SearchActivity activity) { return (WebView) field(activity, "engine"); }
-    private static void loadFixture(ActivityScenario<SearchActivity> scenario) {
-        scenario.onActivity(activity -> engine(activity).loadDataWithBaseURL(
-            "https://vider.info/search/all/local-input-test", FIXTURE, "text/html", "UTF-8",
-            "https://vider.info/search/all/local-input-test"));
+    private static void selectSource(SearchActivity activity, SiteSource source) {
+        try {
+            ((android.widget.Spinner) field(activity, "sourcePicker")).setSelection(source.ordinal());
+            java.lang.reflect.Method method = SearchActivity.class.getDeclaredMethod("selectSource", SiteSource.class);
+            method.setAccessible(true); method.invoke(activity, source);
+        } catch (Exception e) { throw new AssertionError(e); }
+    }
+    private static void loadFixture(ActivityScenario<SearchActivity> scenario) { loadFixture(scenario, SiteSource.VIDER); }
+    private static void loadFixture(ActivityScenario<SearchActivity> scenario, SiteSource source) {
+        scenario.onActivity(activity -> {
+            selectSource(activity, source);
+            String url = source.home + "/search/all/local-input-test";
+            engine(activity).loadDataWithBaseURL(url, FIXTURE, "text/html", "UTF-8", url);
+        });
         AtomicBoolean loaded = new AtomicBoolean();
         long deadline = SystemClock.elapsedRealtime() + 15000;
         while (!loaded.get() && SystemClock.elapsedRealtime() < deadline) {
@@ -131,6 +141,24 @@ public final class VerificationKeyboardTest {
                 assertNotNull(button); button.performClick();
             });
             awaitKeyboard(scenario, true);
+        }
+    }
+
+    @Test public void freediscVerificationShowsKeyboardAndSwitchingSourceRestoresSearch() {
+        try (ActivityScenario<SearchActivity> scenario = ActivityScenario.launch(SearchActivity.class)) {
+            loadFixture(scenario, SiteSource.FREEDISC);
+            awaitKeyboard(scenario, true);
+            scenario.onActivity(activity -> {
+                assertEquals(SiteSource.FREEDISC, field(activity, "selectedSource"));
+                android.widget.EditText query = (android.widget.EditText) field(activity, "query");
+                query.setText("Ronin");
+                selectSource(activity, SiteSource.VIDER);
+                assertNull(field(activity, "verificationPanel"));
+                assertEquals("Ronin", query.getText().toString());
+                assertTrue(query.getHint().toString().contains("Maverick"));
+                assertEquals(0, ((org.json.JSONArray)field(activity, "results")).length());
+                assertNull(field(activity, "requestedSearch"));
+            });
         }
     }
 }

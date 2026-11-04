@@ -78,7 +78,7 @@ public final class MainActivity extends Activity {
         });
         root.requestApplyInsets();
         TextView title = new TextView(this);
-        title.setText("VIDER PLAYER  /  prototyp");
+        title.setText("VideoPlayer  /  prototyp");
         title.setTextColor(Color.rgb(114, 220, 196));
         title.setTextSize(18);
         title.setPadding(dp(16), dp(14), dp(16), dp(8));
@@ -87,7 +87,7 @@ public final class MainActivity extends Activity {
         input.setPadding(dp(8), 0, dp(8), 0);
         address = new EditText(this);
         address.setSingleLine(true);
-        address.setHint("Wklej link z vider.pl lub vider.info");
+        address.setHint("Link filmu z Vider lub Freedisc");
         address.setTextSize(14);
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
         address.setImeOptions(EditorInfo.IME_ACTION_GO);
@@ -155,7 +155,7 @@ public final class MainActivity extends Activity {
                 if (allowed(url)) return false;
                 if (request.hasGesture() && "https".equalsIgnoreCase(request.getUrl().getScheme())) {
                     new AlertDialog.Builder(MainActivity.this)
-                        .setTitle("Link poza Vider")
+                        .setTitle("Link poza obsługiwanymi serwisami")
                         .setMessage("Otworzyć w przeglądarce?\n" + request.getUrl().getHost())
                         .setPositiveButton("Otwórz", (d, w) -> external(url))
                         .setNegativeButton("Anuluj", null).show();
@@ -259,8 +259,7 @@ public final class MainActivity extends Activity {
     private void installDiagnostics() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            Set<String> origins = new java.util.HashSet<>(java.util.Arrays.asList("https://vider.pl", "https://www.vider.pl",
-                "https://vider.info", "https://www.vider.info"));
+            Set<String> origins = UrlPolicy.mediaOrigins();
             WebViewCompat.addWebMessageListener(web, "vpDiagnostics", origins,
                 (view, message, sourceOrigin, mainFrame, reply) -> {
                     if (message.getType() == androidx.webkit.WebMessageCompat.TYPE_STRING) {
@@ -277,7 +276,7 @@ public final class MainActivity extends Activity {
     private void focusPlayer() {
         if (!allowed(web.getUrl())) return;
         web.evaluateJavascript(script("focus-player.js"), result -> {
-            if ("\"missing\"".equals(result)) toast("Nie znaleziono ramki filmu. Otwórz pełną stronę filmu.");
+            if ("\"missing\"".equals(result)) toast("Nie znaleziono odtwarzacza. Otwórz pełną stronę filmu i uruchom odtwarzanie.");
             else if ("\"player\"".equals(result)) {
                 diagnostics.add("focus.enter", web.getUrl(), 0);
                 status.setText("Widok odtwarzacza • reklamy wewnątrz ramki pozostają aktywne");
@@ -339,7 +338,7 @@ public final class MainActivity extends Activity {
     private void openInput(String text) {
         String value = text.trim();
         if (!value.contains("://")) value = "https://" + value;
-        if (!allowed(value)) { toast("Podaj pełny link HTTPS z vider.pl lub vider.info."); return; }
+        if (!allowed(value)) { toast("Podaj link HTTPS z Vider lub Freedisc."); return; }
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
             .hideSoftInputFromWindow(address.getWindowToken(), 0);
         web.requestFocus();
@@ -352,7 +351,7 @@ public final class MainActivity extends Activity {
         if (!Intent.ACTION_SEND.equals(intent.getAction())) return null;
         String value = intent.getStringExtra(Intent.EXTRA_TEXT);
         if (value != null && allowed(value.trim())) return value.trim();
-        toast("Udostępnij sam link HTTPS z vider.pl lub vider.info.");
+        toast("Udostępnij sam link HTTPS z Vider lub Freedisc.");
         return null;
     }
     private void external(String url) {
@@ -366,7 +365,7 @@ public final class MainActivity extends Activity {
     }
     private void bookmark() {
         String url = web.getUrl();
-        if (!allowed(url)) { toast("Najpierw otwórz stronę Vider."); return; }
+        if (!allowed(url)) { toast("Najpierw otwórz stronę filmu."); return; }
         JSONArray list = bookmarks();
         for (int i = 0; i < list.length(); i++) {
             if (list.optJSONObject(i) != null && url.equals(list.optJSONObject(i).optString("url"))) { toast("Ten link jest już na liście."); return; }

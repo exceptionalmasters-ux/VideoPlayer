@@ -1,14 +1,14 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.4.1.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.5.0.
 
 ## Co działa w kodzie
 
-- Otwieranie pełnej strony filmu z vider.pl / vider.info; JavaScript, cookies własne i DOM storage.
+- Otwieranie pełnej strony filmu z vider.pl / vider.info / freedisc.pl; JavaScript, cookies własne i DOM storage.
 - Wklejanie adresu, odbieranie samego linku przez Android „Udostępnij”, cofanie, odświeżanie i lokalne ulubione.
 - Pełny ekran zgłaszany przez odtwarzacz strony i obrót telefonu bez przeładowania Activity.
 - **Widok filmu**: przełącza układ pełnej strony na istniejącą ramkę `.video-frame`. Ramka nie jest przenoszona ani ładowana ponownie. Ponowne dotknięcie przywraca stronę. Obsługa tego układu jest eksperymentalna i zależy od HTML serwisu.
-- **Ekran startowy wyszukiwania**: wpisz tytuł i wybierz Szukaj. Wyszukiwanie Vider działa w tle; ekran aplikacji pokazuje wyłącznie natywne kafelki. Kliknięcie otwiera pełną stronę filmu. Nie ma przejścia na stronę Google ani przycisku otwierającego stronę wyników. „Wyniki” wraca do listy.
+- **Ekran startowy wyszukiwania**: wpisz tytuł i wybierz Szukaj. Wyszukiwanie wybranego źródła (Vider albo Freedisc) działa w tle; ekran aplikacji pokazuje wyłącznie natywne kafelki. Kliknięcie otwiera pełną stronę filmu. Nie ma przejścia na stronę Google ani przycisku otwierającego stronę wyników. „Wyniki” wraca do listy.
 - **Miniatury**: obraz powiązany z linkiem na liście Vider albo obraz z metadanych strony filmu lub jego osadzonego odtwarzacza. Jeśli strona nie udostępni obrazu, kafelek zachowuje neutralne tło i ikonę Play — nie podmieniamy go plakatem innego filmu.
 - **Zachowanie sesji**: cookies Vider, w tym cookies firm trzecich potrzebne niektórym osadzonym komponentom, są włączone i zapisywane. Decyzję o zgodzie podejmuje użytkownik w komunikacie serwisu. Wybrany film jest pamiętany podczas przekierowania na stronę główną; aplikacja podejmuje najwyżej jedną automatyczną próbę powrotu po zamknięciu rozpoznanego komunikatu zgody. Jest też przycisk „Wróć do filmu”.
 - **Diagnostyka → Eksportuj JSON**: zapisuje raport przez systemowy wybór miejsca, bez uprawnienia dostępu do całej pamięci telefonu.
@@ -23,11 +23,11 @@ Dostarczony przez użytkownika zapis MHTML pokazał pełną stronę filmu osadza
 
 Raport zawiera maksymalnie 500 ostatnich zdarzeń w pamięci procesu. Rejestruje nawigacje, błędy HTTP/sieci, żądania ramek i mediów, wejście w pełny ekran oraz widok filmu. Błędy JavaScript zapisują wyłącznie numer linii i zanonimizowany adres skryptu — bez treści komunikatu.
 
-Na WebView obsługującym `WEB_MESSAGE_LISTENER` oraz `DOCUMENT_START_SCRIPT` obserwator otrzymuje zdarzenia z elementów `<video>` w ramkach dokładnie czterech dozwolonych domen strony. Wykrywa również wideo dodane dynamicznie. Zapisuje stan gotowości, buforowania, pauzy, kod błędu i pozycję w sekundach. Zdarzenia pochodzące ze strony są niezaufanymi obserwacjami, nie dowodem pobrania odpowiedzi z serwera. Brak zdarzeń odtwarzania może oznaczać nieobsługiwaną funkcję WebView albo odtwarzacz w innej domenie.
+Na WebView obsługującym `WEB_MESSAGE_LISTENER` oraz `DOCUMENT_START_SCRIPT` obserwator otrzymuje zdarzenia z elementów `<video>` w ramkach dokładnych dozwolonych domen obu stron i zaobserwowanych domen odtwarzacza Freedisc (stream, stream2, ovh.freedisc.pl). Wykrywa również wideo dodane dynamicznie. Zapisuje stan gotowości, buforowania, pauzy, kod błędu i pozycję w sekundach. Zdarzenia pochodzące ze strony są niezaufanymi obserwacjami, nie dowodem pobrania odpowiedzi z serwera. Brak zdarzeń odtwarzania może oznaczać nieobsługiwaną funkcję WebView albo odtwarzacz w innej domenie.
 
 Zanim URL trafi do raportu, usuwane są login/hasło, wszystkie parametry zapytania (np. uid i token), fragment oraz nieznane ścieżki, w tym nazwy profili. Nie rejestrujemy cookies, nagłówków, treści strony, tytułów, historii wyszukiwania ani treści konsoli. Raport nie jest automatycznie wysyłany. Eksportowany plik pozostaje w miejscu wybranym przez użytkownika, a przycisk „Wyczyść raport” usuwa wyłącznie bufor w aplikacji. Bufor znika po zakończeniu procesu.
 
-W WebView filmu cookies firm trzecich są włączone dla zgodności osadzonego odtwarzacza i komponentów zgód. W WebView wyszukiwarki Vider również są włączone, aby zachować ten sam kontekst sesji. Okna pop-up i przejścia poza domeny Vider są blokowane; ręcznie kliknięty link zewnętrzny można otworzyć w przeglądarce po potwierdzeniu. Te ograniczenia mogą wpływać na działanie reklam lub odtwarzacza i są rejestrowane w raporcie. Błędy TLS nie są pomijane, HTTP i dostęp do plików lokalnych są wyłączone. Sesja Chrome nie jest współdzielona z WebView — ewentualne logowanie odbywa się na stronie w aplikacji.
+W WebView filmu cookies firm trzecich są włączone dla zgodności osadzonego odtwarzacza i komponentów zgód. W WebView wyszukiwarki Vider również są włączone, aby zachować ten sam kontekst sesji. Okna pop-up i przejścia poza obsługiwane domeny są blokowane; ręcznie kliknięty link zewnętrzny można otworzyć w przeglądarce po potwierdzeniu. Te ograniczenia mogą wpływać na działanie reklam lub odtwarzacza i są rejestrowane w raporcie. Błędy TLS nie są pomijane, HTTP i dostęp do plików lokalnych są wyłączone. Sesja Chrome nie jest współdzielona z WebView — ewentualne logowanie odbywa się na stronie w aplikacji.
 
 ## APK z GitHub Actions
 
@@ -62,12 +62,12 @@ Ograniczono równoległość pobierania miniatur do jednego zadania i dodano ich
 
 Przycisk **Raport** na ekranie wyszukiwania eksportuje diagnostykę JSON: kod HTTP, liczbę znalezionych linków/kafelków, etap weryfikacji i przekierowania. Zapytanie, tytuły, treść strony, wpisywane litery CAPTCHA, dane logowania i cookies nie są zapisywane w raporcie. Ścieżka zapytania jest usuwana z adresu przed logowaniem. Raport odtwarzacza pozostaje oddzielnie pod przyciskiem Diagnostyka.
 
-Miniatury są pobierane z linków listy lub metadanych tej samej strony/ramki filmu. HTML do 768 KiB i obrazy do 2 MiB, do czterech kontrolowanych przekierowań. Cookies są dołączane tylko do odpowiadającej im domeny Vider. Nie są pobierane filmy MP4 w celu tworzenia miniatur. Przy braku udostępnionego obrazu pozostaje neutralny kafelek Play.
+Miniatury są pobierane z linków listy lub metadanych tej samej strony/ramki filmu. HTML do 768 KiB i obrazy do 2 MiB, do czterech kontrolowanych przekierowań. Cookies są dołączane tylko do odpowiadającej im domeny serwisu. Nie są pobierane filmy MP4 w celu tworzenia miniatur. Przy braku udostępnionego obrazu pozostaje neutralny kafelek Play.
 
 ## Test na telefonie
 
-1. Zainstaluj 0.4.1 jako aktualizację 0.4.0 lub 0.3.0 — podpis testowy powinien być ten sam, więc nie odinstalowuj poprzedniej aplikacji bez potrzeby. Przejście z 0.2.0 może wymagać odinstalowania z powodu dawnego jednorazowego podpisu.
-2. Wpisz tytuł i dotknij Szukaj. Sprawdź kafelki i miniatury. Ekran nie powinien pokazywać Google ani strony wyszukiwarki Vider.
+1. Zainstaluj 0.5.0 jako aktualizację 0.4.0 lub 0.3.0 — podpis testowy powinien być ten sam, więc nie odinstalowuj poprzedniej aplikacji bez potrzeby. Przejście z 0.2.0 może wymagać odinstalowania z powodu dawnego jednorazowego podpisu.
+2. Wybierz źródło Vider albo Freedisc, wpisz tytuł i dotknij Szukaj. Sprawdź kafelki i miniatury. Ekran nie powinien pokazywać Google ani strony wyszukiwarki Vider.
 3. Jeśli otworzy się „Potwierdzenie wyszukiwania”, wpisz kod lub wybierz zgodę samodzielnie. CAPTCHA może wystąpić już po Szukaj, ponieważ samą wyszukiwarkę również chroni Vider. Po zakończeniu powinny pojawić się miniatury. W 0.4.1 pole kodu jest obsługiwane w głównym oknie Activity z adjustResize, a nie w AlertDialog. Jeśli klawiatura została ręcznie zamknięta, przycisk „Klawiatura” otworzy ją dla pola kodu. Anuluj wraca do wyszukiwania.
 4. Dotknij miniatury, uruchom film i sprawdź „Widok filmu”. „Wyniki” wraca do listy.
 5. Jeśli zamiast kafelków jest błąd lub pusta lista, wybierz **Raport** na ekranie wyszukiwania i prześlij JSON z krótkim opisem. Nie trzeba kopiować kodu strony ani odpowiedzi CAPTCHA.
@@ -83,3 +83,16 @@ Zgłoszony ekran CAPTCHA w 0.4.0 nie uruchamiał klawiatury w polu HTML. Zastąp
 Workflow wykonuje dodatkowo testy instrumentacyjne na emulatorze Androida 15: lokalny formularz weryfikacji, widoczność rzeczywistej klawiatury, odbieranie wpisanego tekstu testowego oraz ponowne otwarcie klawiatury przyciskiem. Testy nie łączą się z Vider i nie rozwiązują rzeczywistej CAPTCHA. Raport jest w keyboard-test-reports. Każdy APK przechodzi też oficjalną weryfikację podpisu apksigner przed udostępnieniem.
 
 Potwierdzona weryfikacja 0.4.1: https://github.com/exceptionalmasters-ux/VideoPlayer/actions/runs/41791185103 — kompilacja, testy jednostkowe, testy skryptów, Android Lint i podpis APK przeszły. Na emulatorze Androida 15 przeszły dwa testy rzeczywistego IME: systemowe pole kodu przyjmuje tekst, przycisk przenosi go do lokalnego formularza, anulowanie wraca do listy, a przycisk Klawiatura ponownie otwiera IME. Test formularza ma poprawny URL historii odpowiadający dozwolonej domenie; nie wyłącza to kontroli domen w aplikacji. Użytkownik potwierdził kafelki w 0.4.0; pełny przebieg weryfikacji Vider na telefonie po aktualizacji do 0.4.1 nadal wymaga potwierdzenia.
+
+
+## 0.5.0: drugie źródło — Freedisc
+
+Wybór **Źródło: Vider / Freedisc** przełącza wyszukiwanie w aplikacji. Zapamiętuje ostatni wybór; po zmianie czyści wyniki i zachowuje wpisany tytuł, aby można było wyszukać go w drugim serwisie. Nie łączy automatycznie list obu dostawców. Przycisk **Mam link** obsługuje też format `https://freedisc.pl/uploader,f-ID,nazwa-mp4`. Kliknięcie kafelka uruchamia tę stronę we wspólnym odtwarzaczu. Widok filmu rozpoznaje również JW Player, HTML5 video i ramki osadzonego odtwarzacza Freedisc, zachowując już załadowany element.
+
+Publiczny [OpenSearch Freedisc](https://freedisc.pl/opensearch.xml) deklaruje szablon `https://freedisc.pl/search/all/{searchTerms}`. Odczyt strony głównej i publicznych szablonów serwisu potwierdził linki `,f-ID,`, kontener wyników `#search_files_result`, miniatury lazy `data-src` i obrazy `https://img.freedisc.pl/photo/ID/7/2/...`. Parser łączy obraz i nazwę tego samego pliku; rozpoznaje filmy po typie 7, ikonie filmu lub rozszerzeniu wideo, pomijając katalogi, dokumenty i audio. Korzysta z rzeczywistych adresów obrazów, nie zgaduje ich na podstawie identyfikatora.
+
+Cookies pobierane są dla adresu danej strony; sesja jednego serwisu nie jest kopiowana do drugiego. Nawigacja wyszukiwarki pozostaje w wybranym serwisie, a powrót ze strony głównej do filmu nie przechodzi między dostawcami. Diagnostyka usuwa również nazwę konta i nazwę pliku z adresów Freedisc, zostawiając tylko identyfikator pliku. Obsługa ręcznej weryfikacji z natywnym polem kodu pozostaje wspólna.
+
+Testy obejmują adres przykładowego filmu, leniwe i CSS-owe miniatury, odrzucanie plików innych niż wideo, niezmienność ramki po przełączeniu widoku, wybór źródła i brak powrotu pomiędzy serwisami. Emulator sprawdza klawiaturę również dla lokalnego formularza pod adresem Freedisc oraz powrót do wyszukiwania po przełączeniu źródła. Nie rozwiązuje rzeczywistej CAPTCHA.
+
+Użytkownik potwierdził działanie Vider w 0.4.1. W środowisku deweloperskim strona główna i OpenSearch Freedisc są dostępne, ale podany film i wyszukiwanie zwracają pusty HTTP 404. Dlatego odtworzenie filmu i wyniki Freedisc na żywo wymagają testu na telefonie; sam build ani testy na lokalnych formularzach nie potwierdzają odpowiedzi serwisu. Po instalacji wybierz Freedisc i wyszukaj „Ronin”; można też otworzyć otrzymany link przez **Mam link**. Jeśli nie zadziała, wyeksportuj **Raport** z odpowiedniego ekranu.

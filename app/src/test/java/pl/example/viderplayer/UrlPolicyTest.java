@@ -46,4 +46,20 @@ public final class UrlPolicyTest {
         assertTrue(UrlPolicy.isHome("https://vider.info/?ref=home"));
         assertFalse(UrlPolicy.isHome("https://vider.pl/vid/+fexample"));
     }
+
+    @Test public void freediscFileLinksAndImagesAreScopedAndRedacted() {
+        String movie = "https://freedisc.pl/margot223,f-19724546,ronin-1998-mp4";
+        assertTrue(UrlPolicy.isMovie(movie));
+        assertTrue(UrlPolicy.isMovie("https://www.freedisc.pl/user,f-123"));
+        assertFalse(UrlPolicy.isMovie("https://freedisc.pl/user,d-123,folder"));
+        assertFalse(UrlPolicy.isMovie("https://freedisc.pl.evil.test/user,f-123,movie-mp4"));
+        assertFalse(UrlPolicy.isMovie("http://freedisc.pl/user,f-123,movie-mp4"));
+        assertFalse(UrlPolicy.isMovie("https://user:secret@freedisc.pl/user,f-123"));
+        assertEquals("https://freedisc.pl/file/19724546", UrlPolicy.redact(movie + "?token=secret#private"));
+        assertTrue(UrlPolicy.thumbnail("https://img.freedisc.pl/photo/19724546/7/2/ronin.png"));
+        assertFalse(UrlPolicy.thumbnail("https://img.freedisc.pl.evil.test/photo.png"));
+        assertTrue(UrlPolicy.mediaOrigin("https://stream.freedisc.pl/embed/video/123"));
+        assertFalse(UrlPolicy.mediaOrigin("https://stream.freedisc.pl:444/embed/video/123"));
+        assertFalse(UrlPolicy.mediaOrigin("https://evil.freedisc.pl/"));
+    }
 }
