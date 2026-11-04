@@ -20,7 +20,7 @@ public final class CollectionsTest {
     private static void clickDialog(String text){
         long end=SystemClock.elapsedRealtime()+5000;
         do{AccessibilityNodeInfo root=InstrumentationRegistry.getInstrumentation().getUiAutomation().getRootInActiveWindow();
-            if(root!=null)for(AccessibilityNodeInfo n:root.findAccessibilityNodeInfosByText(text))if(n.isClickable()&&text.contentEquals(n.getText()==null?"":n.getText())){assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK));return;}
+            if(root!=null)for(AccessibilityNodeInfo n:root.findAccessibilityNodeInfosByText(text))if(n.isClickable()&&text.equalsIgnoreCase(n.getText()==null?"":n.getText().toString())){assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK));return;}
             SystemClock.sleep(100);
         }while(SystemClock.elapsedRealtime()<end);
         fail("Missing dialog button: "+text);

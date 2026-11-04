@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     private readonly Presentation presentation = new();
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly Queue<string> log = new();
-    private bool ready, busy, closed, fullscreen, routed, retryUsed;
+    private bool ready, busy, closed, fullscreen, routed, retryUsed, initializing;
     private bool searching, returnPending;
     private DateTime homeReady, searchDeadline;
     private int epoch, searchTicks;
@@ -60,6 +60,7 @@ public partial class MainWindow : Window
     }
     private async void WindowLoaded(object sender, RoutedEventArgs e)
     {
+        if(initializing)return;initializing=true;
         try
         {
             var path = smoke ? Path.Combine(Path.GetTempPath(), "VideoPlayer-smoke-" + Guid.NewGuid().ToString("N")) : profile;
@@ -273,6 +274,7 @@ public partial class MainWindow : Window
     {
         if (!smoke && (!Policy.Movie(Browser.CoreWebView2.Source) || mode != Mode.Movie)) return;
         var result = await Eval("document.getElementById('vp-focus-style') ? 'player' : " + Script("focus-player.js"));
+        Log("focus.result."+(result??"null")+".epoch."+current+"."+epoch);
         if (closed || current != epoch) return;
         if (result == "player")
         {
@@ -392,11 +394,14 @@ public partial class MainWindow : Window
         var completion = new TaskCompletionSource();
         EventHandler<CoreWebView2NavigationCompletedEventArgs> handler = (_, _) => completion.TrySetResult();
         Browser.CoreWebView2.NavigationCompleted += handler;
-        Browser.NavigateToString("<!doctype html><html><body><div class='video-frame'><video controls></video></div><p id='comments'>Comments</p></body></html>");
+        Browser.NavigateToString("<!doctype html><html><body data-vp-smoke='ready'><div class='video-frame'><video controls></video></div><p id='comments'>Comments</p></body></html>");
         await completion.Task.WaitAsync(TimeSpan.FromSeconds(20));
         Browser.CoreWebView2.NavigationCompleted -= handler;
+        var deadline=DateTime.UtcNow.AddSeconds(20);
+        while(await Browser.ExecuteScriptAsync("!!document.querySelector('body[data-vp-smoke=ready] .video-frame video')")!="true")
+        {if(DateTime.UtcNow>deadline)throw new Exception("Local smoke document not ready: "+Browser.CoreWebView2.Source);await Task.Delay(100);}
         await FocusMovie(true, epoch);
-        if (!fullscreen || Header.Visibility != Visibility.Collapsed) throw new Exception("Automatic native fullscreen failed");
+        if (!fullscreen || Header.Visibility != Visibility.Collapsed) throw new Exception("Automatic native fullscreen failed: full="+fullscreen+" header="+Header.Visibility+" source="+Browser.CoreWebView2.Source+" focus="+await Browser.ExecuteScriptAsync("!!document.getElementById('vp-focus-style')")+" log="+string.Join(" | ",log));
         if (await Browser.ExecuteScriptAsync("!!document.getElementById('vp-focus-style') && document.querySelector('video').paused") != "true") throw new Exception("Focus or no-autoplay failed");
         LeaveFullscreen();
         if (fullscreen || presentation.Pending || Header.Visibility != Visibility.Visible) throw new Exception("Escape did not restore controls");

@@ -41,13 +41,20 @@ public final class AutomaticPresentationTest {
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap bitmap){original.onPageStarted(view,url,bitmap);}
                 @Override public void onPageFinished(WebView view,String url){original.onPageFinished(view,url);}
             });
-            web.loadDataWithBaseURL(URL,"<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body>"+body+"</body></html>","text/html","UTF-8",URL);
+            web.loadDataWithBaseURL(URL,"<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body data-vp-test='presentation'>"+body+"</body></html>","text/html","UTF-8",URL);
         });
+        long loaded=SystemClock.elapsedRealtime()+15000;
+        while(!"true".equals(eval(scenario,"!!document.querySelector('body[data-vp-test=presentation]')"))){
+            if(SystemClock.elapsedRealtime()>loaded)fail("Local presentation document was not loaded");
+            SystemClock.sleep(100);
+        }
     }
     private static void await(ActivityScenario<MainActivity> scenario,Predicate<MainActivity> condition,String message){
         AtomicBoolean ready=new AtomicBoolean();long end=SystemClock.elapsedRealtime()+15000;
         do{scenario.onActivity(activity->ready.set(condition.test(activity)));if(ready.get())return;SystemClock.sleep(100);}while(SystemClock.elapsedRealtime()<end);
-        fail(message);
+        AtomicReference<String> details=new AtomicReference<>("");
+        scenario.onActivity(activity->details.set(((DiagnosticLog)field(activity,"diagnostics")).export()+" resumed="+field(activity,"resumed")+" pending="+((PresentationPolicy)field(activity,"presentation")).shouldEnter()+" url="+web(activity).getUrl()));
+        fail(message+" · "+details.get()+" · DOM="+eval(scenario,"JSON.stringify({fixture:!!document.querySelector('[data-vp-test]'),focus:!!document.getElementById('vp-focus-style'),videos:document.querySelectorAll('video').length})"));
     }
     private static String eval(ActivityScenario<MainActivity> scenario,String script){
         AtomicReference<String> value=new AtomicReference<>();scenario.onActivity(activity->web(activity).evaluateJavascript(script,value::set));
