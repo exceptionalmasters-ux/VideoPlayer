@@ -692,6 +692,10 @@ public final class SearchActivity extends Activity {
                 card.setNextFocusDownId(i+columns<grid.getChildCount()?grid.getChildAt(i+columns).getId():card.getId());
                 final int position=i;
                 card.setOnKeyListener((v,key,event)->{
+                    if(key==android.view.KeyEvent.KEYCODE_DPAD_CENTER||key==android.view.KeyEvent.KEYCODE_ENTER){
+                        if(event.getAction()==android.view.KeyEvent.ACTION_UP)v.performClick();
+                        return true;
+                    }
                     int target=position;
                     if(key==android.view.KeyEvent.KEYCODE_DPAD_UP)target=position-columns;
                     else if(key==android.view.KeyEvent.KEYCODE_DPAD_DOWN)target=position+columns<grid.getChildCount()?position+columns:position;

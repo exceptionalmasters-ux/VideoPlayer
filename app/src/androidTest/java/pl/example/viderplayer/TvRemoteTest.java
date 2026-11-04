@@ -38,7 +38,16 @@ public final class TvRemoteTest {
         Intent launcher=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(context.getPackageName());
         assertNotNull(context.getPackageManager().resolveActivity(launcher,0));
         assertTrue(context.getApplicationInfo().banner!=0);
-        Instrumentation.ActivityMonitor monitor=instrumentation.addMonitor(MainActivity.class.getName(),new Instrumentation.ActivityResult(0,null),true);
+        AtomicReference<Intent> opened=new AtomicReference<>();
+        Instrumentation.ActivityMonitor monitor=new Instrumentation.ActivityMonitor(){
+            @Override public Instrumentation.ActivityResult onStartActivity(Intent intent){
+                if(intent.getComponent()!=null&&MainActivity.class.getName().equals(intent.getComponent().getClassName())){
+                    opened.set(new Intent(intent));return new Instrumentation.ActivityResult(0,null);
+                }
+                return null;
+            }
+        };
+        instrumentation.addMonitor(monitor);
         try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(SearchActivity.class)){
             scenario.onActivity(activity->{
                 try{
@@ -57,11 +66,13 @@ public final class TvRemoteTest {
             key(KeyEvent.KEYCODE_DPAD_UP);key(KeyEvent.KEYCODE_DPAD_LEFT);key(KeyEvent.KEYCODE_DPAD_UP);
             scenario.onActivity(activity->{assertTrue("UP from the first row must focus the search field",((View)field(activity,"query")).hasFocus());});
             key(KeyEvent.KEYCODE_DPAD_DOWN);key(KeyEvent.KEYCODE_DPAD_RIGHT);
+            scenario.onActivity(activity->assertTrue("RIGHT after returning from search must select the second card",((GridLayout)field(activity,"grid")).getChildAt(1).hasFocus()));
+            key(KeyEvent.KEYCODE_DPAD_CENTER);
+            scenario.onActivity(activity->assertEquals("OK must activate the selected card",1,field(activity,"selectedResultIndex")));
+            assertNotNull("OK must request the movie Activity",opened.get());
+            assertEquals("https://freedisc.pl/tester,f-101,test-mp4",opened.get().getDataString());
             android.graphics.Bitmap screenshot=instrumentation.getUiAutomation().takeScreenshot();
             if(screenshot!=null){try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(context.getExternalFilesDir(null),"tv-results.png"))){screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}
-            key(KeyEvent.KEYCODE_DPAD_CENTER);
-            assertEquals(1,monitor.getHits());
-            scenario.onActivity(activity->assertEquals(1,field(activity,"selectedResultIndex")));
         }finally{instrumentation.removeMonitor(monitor);}
     }
     private static Button find(View view,String text){
