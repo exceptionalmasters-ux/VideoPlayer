@@ -1,6 +1,6 @@
 # VideoPlayer
 
-Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.6.0.
+Nieoficjalny prototyp aplikacji Android 8.0+ do otwierania stron filmów Vider i Freedisc oraz diagnozowania odtwarzania na rzeczywistym telefonie. Wersja 0.6.1.
 
 ## Co działa w kodzie
 
@@ -148,3 +148,10 @@ Jeśli serwis wymaga własnego kliknięcia lub zgody, przycisk Strona przekazuje
 W trybie TV odtwarzanie JS nie wymaga dodatkowego gestu w WebView, ponieważ polecenie pilota może przejść do ramki przez postMessage. Aplikacja nie wysyła automatycznie polecenia Play. Komunikaty sterowania przyjmowane są tylko od bezpośredniej ramki rodzica z dokładnej dozwolonej domeny HTTPS i zawierają wyłącznie zamkniętą listę poleceń. W raporcie mogą pojawić się zdarzenia tv.command, bez tytułu i wpisanego kodu.
 
 CI oprócz testów telefonu uruchamia emulator Android TV 14 (android-tv, x86, tv_1080p). Testuje launcher TV, nawigację strzałkami między kartami i polem wyszukiwania, wybór filmu klawiszem OK oraz ręczne zatwierdzanie lokalnego formularza. Uruchomienie filmu w teście jest przechwytywane przed otwarciem strony, więc test nie zależy od serwisów. Skrypty testują polecenia odtwarzacza i dopuszczalne ramki; testy jednostkowe mapowanie pilota. Raporty i zrzut ekranu są w tv-test-reports. Odtwarzanie rzeczywistych filmów i konkretnego pilota wymaga sprawdzenia na urządzeniu użytkownika.
+
+
+## 0.6.1: nowa ikona i baner TV
+
+Nowa ikona to zaokrąglony, miętowy symbol odtwarzania z delikatnym gradientem na granatowym tle. Zawiera adaptacyjny wariant Android 8+ i osobną warstwę monochromatyczną dla ikon tematycznych Androida 13+. Znak mieści się w bezpiecznej strefie maskowania ikony. Baner Android TV 320×180 px korzysta z tego samego znaku. Manifest wskazuje wspólną ikonę launcher i roundIcon.
+
+W `design/app-icon.svg` znajduje się edytowalny projekt, w `design/app-icon-preview.png` podgląd. Skrypt `python3 tools/generate_icon.py` (Pillow) odtwarza zasoby wektorowe i PNG. Gotowe zasoby są zapisane w repozytorium; Pillow nie jest potrzebny do kompilacji ani działania APK. Wersja zmienia grafikę i numer aktualizacji, bez zmian w logice wyszukiwania, pilota i odtwarzania.
