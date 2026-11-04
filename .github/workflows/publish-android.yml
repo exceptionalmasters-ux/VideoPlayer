@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-android-0.7.0
+  group: publish-android-0.7.1
   cancel-in-progress: false
 jobs:
   publish:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-debug
-          run-id: 41870695607
+          run-id: 41912363622
           github-token: ${{ github.token }}
           path: verified
       - name: Publish the verified universal APK
@@ -30,11 +30,11 @@ jobs:
           set -euo pipefail
           mapfile -t apks < <(find verified -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" VideoPlayer-0.7.0.apk
-          echo 'de577450b371e96a7ab5f2b398ac264cc135c418fc9b934440673cc046d2759e  VideoPlayer-0.7.0.apk' | sha256sum -c -
-          if gh release view android-v0.7.0 >/dev/null 2>&1; then
-            gh release download android-v0.7.0 --pattern VideoPlayer-0.7.0.apk --output existing.apk
-            echo 'de577450b371e96a7ab5f2b398ac264cc135c418fc9b934440673cc046d2759e  existing.apk' | sha256sum -c -
+          cp "${apks[0]}" VideoPlayer-0.7.1.apk
+          echo 'c39a9baa6a85d10a8280bd1e59f8d504a87a6747e16326dda794ed07ac0a9b12  VideoPlayer-0.7.1.apk' | sha256sum -c -
+          if gh release view android-v0.7.1 >/dev/null 2>&1; then
+            gh release download android-v0.7.1 --pattern VideoPlayer-0.7.1.apk --output existing.apk
+            echo 'c39a9baa6a85d10a8280bd1e59f8d504a87a6747e16326dda794ed07ac0a9b12  existing.apk' | sha256sum -c -
           else
-            gh release create android-v0.7.0 VideoPlayer-0.7.0.apk --target d2d4fd3dc5c48532c0b4c80e613e50e1db656715 --title 'VideoPlayer 0.7.0 — Android i Android TV' --notes 'Uniwersalny APK na telefon, tablet i Android TV. Własna historia i ulubione jako kafelki, usuwanie pozycji i czyszczenie list z potwierdzeniem. Testy telefonu i TV przeszły. SHA-256: de577450b371e96a7ab5f2b398ac264cc135c418fc9b934440673cc046d2759e' --prerelease
+            gh release create android-v0.7.1 VideoPlayer-0.7.1.apk --target 4b758fd612c00097ed8da940eca2ae9c4332e81f --title 'VideoPlayer 0.7.1 — Android i Android TV' --notes 'Poprawiona nawigacja pilotem przez przyciski i kafelki. Enter oraz zatwierdzenie klawiatury TV uruchamia wyszukiwanie. Czytelne pola kodu z automatycznym fokusem. Uproszczony pasek filmu: OK to pauza, lewo/prawo przewija. Opcjonalny kursor pilota. Historia i ulubione zachowane. Testy telefonu i TV przeszły. SHA-256: c39a9baa6a85d10a8280bd1e59f8d504a87a6747e16326dda794ed07ac0a9b12' --prerelease
           fi
