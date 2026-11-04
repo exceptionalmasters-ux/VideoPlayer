@@ -166,3 +166,7 @@ Wstecz pokazuje przyciski aplikacji i pozostawia widok filmu; do końca tego dok
 CAPTCHA, zgoda lub widoczne logowanie wstrzymują automatyczny widok. Jeżeli wymagany krok pojawi się później, aplikacja przywraca stronę i sterowanie; kod może zostać wpisany w natywnym polu. Czas potrzebny użytkownikowi nie wyczerpuje limitu wykrywania odtwarzacza. Po zakończeniu kroku automatyczny pełny ekran może wrócić, o ile użytkownik sam nie wyłączył tego trybu. Odczyt widoczności uwzględnia też gałęzie ukryte wcześniej przez Widok filmu, bez zmiany oryginalnych ukrytych formularzy serwisu.
 
 Polityka automatycznego wejścia, powrotu po weryfikacji i respektowania Wstecz ma testy jednostkowe. Testy skryptu sprawdzają wykrywanie późniejszej weryfikacji w ukrytej gałęzi. Testy instrumentacyjne na telefonie i TV używają lokalnych stron: automatyczne dopasowanie i pełny ekran, brak automatycznego Play, Wstecz bez ponownego wymuszenia trybu, opóźniony odtwarzacz oraz pojawienie się formularza kodu już po wejściu w pełny ekran.
+
+## Windows
+
+Wersja desktopowa C# / WPF / WebView2 znajduje się w [`windows`](windows/README.md). Osobny workflow `Windows desktop` buduje samodzielny EXE dla Windows x64. Skrypty obsługi Vider i Freedisc są współdzielone z aplikacją Android.

@@ -6,3 +6,7 @@
 /.tools/
 /__pycache__/
 /.ci-signing/
+**/bin/
+**/obj/
+/windows/publish/
+/windows/VideoPlayer.Windows/app.ico

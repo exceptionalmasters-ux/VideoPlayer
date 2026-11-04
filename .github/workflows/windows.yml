@@ -1,0 +1,61 @@
+name: Windows desktop
+on:
+  push:
+    paths:
+      - 'windows/**'
+      - 'app/src/main/assets/**'
+      - 'tests/**'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Shared browser scripts
+        run: node --test tests/*.test.cjs
+      - name: URL and presentation policies
+        run: dotnet run --project windows/VideoPlayer.Checks -c Release
+      - name: Generate application icon
+        shell: powershell
+        run: ./windows/build-icon.ps1
+      - name: Publish standalone EXE
+        run: dotnet publish windows/VideoPlayer.Windows -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o windows/publish
+      - name: WebView2 smoke test
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Resolve-Path windows/publish/VideoPlayer-Windows.exe
+          $process = Start-Process $exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(90000)) { $process.Kill(); throw 'Desktop smoke test timed out' }
+          if (Test-Path windows/publish/smoke-result.txt) { Get-Content windows/publish/smoke-result.txt }
+          if ($process.ExitCode -ne 0) { throw "Smoke test failed: $($process.ExitCode)" }
+          if (!(Test-Path windows/publish/smoke-result.txt)) { throw 'Missing smoke result' }
+          if (!(Get-Content windows/publish/smoke-result.txt -Raw).StartsWith('PASS:')) { throw 'Smoke test did not pass' }
+      - name: Check EXE and checksum
+        shell: pwsh
+        run: |
+          $exe = 'windows/publish/VideoPlayer-Windows.exe'
+          $bytes = [IO.File]::ReadAllBytes($exe)
+          if ($bytes[0] -ne 77 -or $bytes[1] -ne 90) { throw 'Invalid PE file' }
+          (Get-FileHash $exe -Algorithm SHA256).Hash | Set-Content windows/publish/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoPlayer-Windows-x64
+          path: windows/publish/VideoPlayer-Windows.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-validation
+          path: |
+            windows/publish/smoke-result.txt
+            windows/publish/SHA256.txt
