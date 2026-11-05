@@ -94,10 +94,10 @@ public final class NextEpisodeTest {
         Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();AtomicReference<Intent> opened=new AtomicReference<>();
         try(ActivityScenario<MainActivity> scenario=launch()){
             ConcurrentLinkedQueue<String> requests=new ConcurrentLinkedQueue<>();provider(scenario,path->cards("S01E02"),requests);
-            scenario.onActivity(a->ui(a).observe(URL,TITLE,69,100,false));assertTrue(requests.isEmpty());
-            scenario.onActivity(a->ui(a).observe(URL,TITLE,70,100,false));
+            scenario.onActivity(a->ui(a).observe(URL,TITLE,59,100,false));assertTrue(requests.isEmpty());
+            scenario.onActivity(a->ui(a).observe(URL,TITLE,60,100,false));
             await(scenario,a->ui(a).flow.stage==EpisodeFlow.Stage.READY,"Next episode was not prefetched");
-            scenario.onActivity(a->{assertNull(ui(a).panel);assertNull(ui(a).accessPanel);assertEquals(2,ui(a).rows.length());assertFalse(ui(a).flow.seasonFallback);ui(a).observe(URL,TITLE,100,100,true);});
+            scenario.onActivity(a->{assertNull(ui(a).panel);assertNull(ui(a).accessPanel);assertEquals(2,ui(a).rows.length());assertFalse(ui(a).flow.seasonFallback);ui(a).observe(URL,TITLE,89,100,false);assertNull(ui(a).panel);ui(a).observe(URL,TITLE,90,100,false);assertFalse(ui(a).flow.ended);});
             await(scenario,a->ui(a).panel!=null&&ui(a).panel.isLaidOut()&&(!TvUi.enabled(a)||ui(a).cards.getChildAt(0).hasFocus()),"End overlay or first-card focus missing");
             snapshot("videoplayer-next-episode.png");
             assertEquals("true",eval(scenario,"!!document.querySelector('[data-next-fixture=movie]')"));
@@ -106,7 +106,7 @@ public final class NextEpisodeTest {
             try{
                 scenario.onActivity(a->{assertEquals(2,ui(a).cards.getChildCount());if(!TvUi.enabled(a))ui(a).cards.getChildAt(0).performClick();});
                 AtomicBoolean tv=new AtomicBoolean();if(opened.get()==null){scenario.onActivity(a->tv.set(TvUi.enabled(a)));if(tv.get())instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);}
-                instrumentation.waitForIdleSync();assertNotNull("Next card did not open",opened.get());assertEquals("https://vider.info/vid/+fnextone",opened.get().getDataString());
+                instrumentation.waitForIdleSync();assertNotNull("Next card did not open",opened.get());assertEquals("https://vider.info/vid/+fnextone",opened.get().getDataString());assertTrue(opened.get().getBooleanExtra("nextEpisodeAutoPlay",false));
             }finally{instrumentation.removeMonitor(monitor);}
             assertEquals(1,requests.size());
         }finally{cleanup();}

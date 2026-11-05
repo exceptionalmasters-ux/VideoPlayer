@@ -6,13 +6,14 @@ final class EpisodeFlow {
     final EpisodePlan current;
     EpisodePlan target;
     Stage stage=Stage.IDLE;
-    boolean seasonFallback,ended,dismissed;
+    boolean seasonFallback,ended,dismissed,nearEnd;
     EpisodeFlow(EpisodePlan current){this.current=current;}
     String playback(long position,long duration,boolean complete){
         if(duration<=0||duration>86400||position<0||position>duration+2||complete&&duration-position>2)return null;
         if(ended&&!complete&&position<duration-60){ended=false;dismissed=false;}
+        nearEnd=complete||duration-position<=10;
         if(complete)ended=true;
-        if(stage!=Stage.IDLE||!complete&&(duration-position>30||duration-position<0))return null;
+        if(stage!=Stage.IDLE||!complete&&(duration-position>40||duration-position<0))return null;
         target=current.next();if(target==null){stage=Stage.EMPTY;return null;}
         stage=Stage.SEARCHING;return target.query();
     }

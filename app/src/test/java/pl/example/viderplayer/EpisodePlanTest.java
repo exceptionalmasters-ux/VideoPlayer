@@ -15,9 +15,9 @@ public final class EpisodePlanTest {
     @Test public void filmsSpecialsPacksAndMissingSeriesAreNotGuessed(){
         for(String title:new String[]{"Ronin 1998","Film 1920x1080","S01E01","Serial S00E01","Serial S01E00","Serial S01E01E02","Serial S01E01 S01E02"})assertNull(title,EpisodePlan.parse(title));
     }
-    @Test public void prefetchRunsOnceAtThirtySecondsAndEndDoesNotMeanNearEnd(){
-        EpisodeFlow f=new EpisodeFlow(EpisodePlan.parse("Serial S01E01"));assertNull(f.playback(60,100,false));assertFalse(f.ended);
-        assertEquals("Serial S01E02",f.playback(70,100,false));assertFalse(f.ended);assertNull(f.playback(71,100,false));assertNull(f.playback(99,100,false));assertFalse(f.ended);
+    @Test public void prefetchAtFortySuggestionsAtTenAndEndRemainsSeparate(){
+        EpisodeFlow f=new EpisodeFlow(EpisodePlan.parse("Serial S01E01"));assertNull(f.playback(59,100,false));assertFalse(f.ended);
+        assertEquals("Serial S01E02",f.playback(60,100,false));assertFalse(f.nearEnd);assertFalse(f.ended);assertNull(f.playback(71,100,false));assertNull(f.playback(89,100,false));assertFalse(f.nearEnd);assertNull(f.playback(90,100,false));assertTrue(f.nearEnd);assertFalse(f.ended);
         f.playback(100,100,true);assertTrue(f.ended);
     }
     @Test public void onlySuccessfulNoMatchMovesToNextSeasonAndOnlyOnce(){

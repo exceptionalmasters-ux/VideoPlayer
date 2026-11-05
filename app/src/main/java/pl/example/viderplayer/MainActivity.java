@@ -90,6 +90,7 @@ public final class MainActivity extends Activity {
     private long pendingTvTapUntil;
     private int pendingTvTapGeneration;
     private EpisodeSuggestions episodes;
+    private boolean nextEpisodeAutoPlay;
     private int playerUiFlags;
     private Button fullscreenControls;
 
@@ -97,6 +98,7 @@ public final class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        nextEpisodeAutoPlay=getIntent().getBooleanExtra("nextEpisodeAutoPlay",false);
         library=new LocalLibrary(this);
         String launchUrl=sharedUrl(getIntent());
         if(launchUrl!=null&&state==null&&getIntent().getBooleanExtra("fromStart",false)){MovieLibrary.Item saved=library.find(launchUrl);if(saved!=null)library.progress(launchUrl,0,saved.duration,false);}
@@ -230,7 +232,7 @@ public final class MainActivity extends Activity {
             @Override public void open(JSONObject item){
                 String url=item.optString("url");if(!UrlPolicy.isMovie(url))return;
                 library.opened(url,item.optString("title"),item.optString("thumbnail"));
-                startActivity(new Intent(MainActivity.this,MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)).putExtra("movieTitle",item.optString("title")).putExtra("movieThumbnail",item.optString("thumbnail")));
+                startActivity(new Intent(MainActivity.this,MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)).putExtra("movieTitle",item.optString("title")).putExtra("movieThumbnail",item.optString("thumbnail")).putExtra("nextEpisodeAutoPlay",true));
                 finish();
             }
             @Override public void manual(String query,SiteSource source){
@@ -601,6 +603,11 @@ public final class MainActivity extends Activity {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
             diagnostics.add(automatic?"presentation.auto_fullscreen":"presentation.fullscreen",web.getUrl(),0);
+            if(nextEpisodeAutoPlay){
+                nextEpisodeAutoPlay=false;
+                if(television)tvCommand("play");
+                else web.evaluateJavascript(script("tv-media.js")+";window.__vpTvCommand && window.__vpTvCommand('play','');",null);
+            }
             if(!automatic&&television)toast("OK: pauza/wznów · lewo/prawo: 10 sekund · Wstecz: przyciski");
         });
     }

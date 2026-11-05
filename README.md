@@ -204,7 +204,7 @@ OK uruchamia widoczny, oryginalny przycisk Play odtwarzacza bez włączania kurs
 
 ### Kolejny odcinek (Android / Android TV, 0.8.0)
 
-Przy nazwach zawierających S01E01, S1E01 lub 1x01 aplikacja przygotowuje zapytanie o następny odcinek w tym samym źródle, około 30 sekund przed końcem treści. Osobny WebView wyszukiwania nie przeładowuje filmu. Po zdarzeniu zakończenia treści natywny panel nad filmem pokazuje maksymalnie 8 pasujących wersji, z wyborem dotykiem lub pilotem. Nie ma automatycznego otwierania odcinka. Wstecz zamyka panel.
+Przy nazwach zawierających S01E01, S1E01 lub 1x01 aplikacja przygotowuje zapytanie o następny odcinek w tym samym źródle, około 40 sekund przed końcem treści. Osobny WebView wyszukiwania nie przeładowuje filmu. 10 sekund przed końcem treści mniejszy natywny panel nad filmem pokazuje maksymalnie 8 pasujących wersji, z wyborem dotykiem lub pilotem. Film gra dalej do końca. Wybranie kafelka otwiera kolejny odcinek na pełnym ekranie i próbuje uruchomić oryginalny odtwarzacz. Jeśli serwis wymaga interakcji, pozostaje jego przycisk Play. Wstecz zamyka panel.
 
 Tylko zakończone wyszukiwanie bez pasujących odcinków powoduje jedną próbę znalezienia S02E01 (następnego sezonu względem bieżącego). Ładowanie wyników, nierozpoznana odpowiedź, błąd sieci i ekran CAPTCHA nie oznaczają końca sezonu. Dopasowanie sprawdza nazwę serialu, sezon i odcinek; nie korzysta z zewnętrznego katalogu seriali.
 

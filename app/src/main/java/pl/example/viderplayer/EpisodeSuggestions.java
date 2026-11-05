@@ -76,10 +76,11 @@ final class EpisodeSuggestions {
     private void update(){
         if(disposed||paused||flow==null)return;
         if(accessPanel!=null&&flow.stage!=EpisodeFlow.Stage.ACCESS)closeAccess();
+        if(panel!=null&&!flow.nearEnd&&!flow.ended){removePanel();host.restoreFocus();}
         notice.setText(tv?"Kolejny odcinek wymaga potwierdzenia · ↓":"Kolejny odcinek wymaga potwierdzenia · dotknij");
         notice.setVisibility(flow.stage==EpisodeFlow.Stage.ACCESS&&(!flow.ended||flow.dismissed)&&accessPanel==null?View.VISIBLE:View.GONE);
         if(notice.getVisibility()==View.VISIBLE)notice.bringToFront();
-        if(flow.ended&&!flow.dismissed){
+        if((flow.ended||flow.nearEnd&&flow.stage==EpisodeFlow.Stage.READY)&&!flow.dismissed){
             if(flow.stage==EpisodeFlow.Stage.ACCESS){if(accessPanel==null)showAccess();}
             else if(accessPanel==null)showPanel();
         }
@@ -100,15 +101,15 @@ final class EpisodeSuggestions {
         String state=flow.stage==EpisodeFlow.Stage.READY?"Wybierz wersję odcinka":flow.stage==EpisodeFlow.Stage.EMPTY?"Nie znaleziono kolejnego odcinka ani pierwszego odcinka następnego sezonu.":flow.stage==EpisodeFlow.Stage.FAILED?error:"Szukam kolejnego odcinka…";
         panel.addView(text(state,tv?16:14));
         ScrollView scroll=new ScrollView(activity);panel.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        cards=new GridLayout(activity);int columns=tv?4:2;cards.setColumnCount(columns);scroll.addView(cards);
+        cards=new GridLayout(activity);int columns=tv?5:3;cards.setColumnCount(columns);scroll.addView(cards);
         List<List<View>> focusRows=new ArrayList<>();List<View> current=new ArrayList<>();
         int width=(activity.getResources().getDisplayMetrics().widthPixels-dp(tv?72:32))/columns;
         if(flow.stage==EpisodeFlow.Stage.READY)for(int i=0;i<rows.length();i++){
             JSONObject item=rows.optJSONObject(i);if(item==null)continue;
             LinearLayout card=new LinearLayout(activity);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(4),dp(4),dp(4),dp(4));card.setBackgroundColor(Color.rgb(29,40,53));
             card.setFocusable(true);card.setFocusableInTouchMode(true);card.setId(View.generateViewId());TvUi.focusable(card);card.setDescendantFocusability(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-            GridLayout.LayoutParams size=new GridLayout.LayoutParams();size.width=width;size.height=dp(tv?174:154);size.setMargins(dp(2),dp(2),dp(2),dp(2));cards.addView(card,size);
-            ImageView image=new ImageView(activity);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setBackgroundColor(Color.rgb(36,61,72));card.addView(image,new LinearLayout.LayoutParams(-1,dp(tv?100:86)));
+            GridLayout.LayoutParams size=new GridLayout.LayoutParams();size.width=width;size.height=dp(tv?136:122);size.setMargins(dp(2),dp(2),dp(2),dp(2));cards.addView(card,size);
+            ImageView image=new ImageView(activity);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setBackgroundColor(Color.rgb(36,61,72));card.addView(image,new LinearLayout.LayoutParams(-1,dp(tv?72:58)));
             TextView name=text(item.optString("title"),tv?15:13);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(name);
             card.setContentDescription("Otwórz kolejny odcinek: "+item.optString("title"));card.setOnClickListener(v->host.open(item));
             thumbnails.load(image,item.optString("url"),item.optString("thumbnail"),worker==null?"":worker.engine.getSettings().getUserAgentString());
@@ -121,7 +122,7 @@ final class EpisodeSuggestions {
         footer.add(button(actions,"Szukaj ręcznie",()->host.manual(query(),source)));
         footer.add(button(actions,"Zamknij",this::dismiss));focusRows.add(footer);TvFocus.connect(focusRows);
         int available=root.getHeight()>0?root.getHeight():activity.getResources().getDisplayMetrics().heightPixels;
-        FrameLayout.LayoutParams pos=new FrameLayout.LayoutParams(-1,Math.max(dp(240),available*(tv?4:3)/5),Gravity.BOTTOM);root.addView(panel,pos);panel.bringToFront();rendered=marker;
+        FrameLayout.LayoutParams pos=new FrameLayout.LayoutParams(-1,Math.max(dp(240),available*2/5),Gravity.BOTTOM);root.addView(panel,pos);panel.bringToFront();rendered=marker;
         if(tv){View first=cards.getChildCount()>0?cards.getChildAt(0):footer.get(0);first.post(first::requestFocus);}
         diagnostics.add("episode.panel.shown",null,rows.length());
     }
