@@ -22,6 +22,7 @@
   bridge.onmessage=function(e){
     try{const value=JSON.parse(e.data);if(typeof value.token!=='string'||!Number.isFinite(value.position))return;
       token=value.token;saved=value;restoring=value.position>0;attempts=0;restoreAt=0;
+      if(value.autostart===true&&window.__vpStartOriginalPlayer)window.__vpStartOriginalPlayer(player,send);
     }catch(_){}
   };
   function time(data){
@@ -48,7 +49,7 @@
       p.on('adStarted',function(){if(player===p)ad=true;});
       ['adComplete','adSkipped','adError'].forEach(function(event){p.on(event,function(){if(player===p)ad=false;});});
       p.on('time',function(data){if(player===p)time(data);});
-      p.on('pause',function(){if(player===p)flush();});p.on('seeked',function(){if(player===p&&checkpoint)sentAt=0;});
+      p.on('pause',function(){if(player===p){if(window.__vpCancelAutoStart)window.__vpCancelAutoStart();flush();}});p.on('seeked',function(){if(player===p&&checkpoint)sentAt=0;});
       p.on('complete',function(){if(player===p&&!ad&&!restoring&&checkpoint){checkpoint.ended=true;checkpoint.position=checkpoint.duration;flush();}});
       send('hello',{});
     }catch(_){}

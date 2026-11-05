@@ -29,7 +29,7 @@ public final class AutomaticPresentationTest {
     }
     private static WebView web(MainActivity activity){return (WebView)field(activity,"web");}
     private static ActivityScenario<MainActivity> launch(){
-        Intent intent=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(URL));
+        Intent intent=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(URL)).putExtra("manualStart",true);
         return ActivityScenario.launch(intent);
     }
     private static void load(ActivityScenario<MainActivity> scenario,String body){loadAt(scenario,body,URL);}
@@ -190,5 +190,28 @@ public final class AutomaticPresentationTest {
             assertEquals("0",eval(scenario,frame+".apiPlayCalls"));
         }finally{library.remove("history",URL);}
     }
+    @Test public void autostartWaitsForLateEmbedPlayerAndStopsAfterPlaybackAndManualPause(){
+        Intent intent=new Intent(InstrumentationRegistry.getInstrumentation().getTargetContext(),MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(URL));
+        String child="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>html,body{margin:0;width:100%;height:100%}.jwplayer{position:relative;width:100vw;height:100vh}video{width:100%;height:100%}button{position:absolute;left:40%;top:40%;width:20%;height:20%}</style></head><body><div class='jwplayer'><video class='jw-video'></video><button class='jw-icon-playback' aria-label='Play'>Play</button></div><script>"
+            +"window.events={};window.trustedClicks=0;window.playState='idle';setTimeout(function(){window.player={getState:function(){return playState},on:function(n,f){events[n]=f},play:function(){},pause:function(){playState='paused';if(events.pause)events.pause()}};window.jwplayer=function(){return player}},1800);"
+            +"document.querySelector('button').addEventListener('click',function(e){if(e.isTrusted){trustedClicks++;playState='playing';this.setAttribute('aria-label','Pause')}});</script></body></html>";
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(intent)){
+            loadAt(scenario,"<div class='video-frame'><iframe style='border:0' src='https://vider.info/embed/video/autotest'></iframe></div>",URL,child);
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Autostart movie did not enter fullscreen");
+            await(scenario,a->!(Boolean)field(a,"autoStartPending"),"Delayed original Play was not confirmed");
+            String frame="document.querySelector('iframe').contentWindow";
+            assertEquals("1",eval(scenario,frame+".trustedClicks"));assertEquals("\"playing\"",eval(scenario,frame+".playState"));
+            eval(scenario,frame+".player.pause();true");SystemClock.sleep(3200);
+            assertEquals("\"paused\"",eval(scenario,frame+".playState"));assertEquals("1",eval(scenario,frame+".trustedClicks"));
+        }finally{new LocalLibrary(InstrumentationRegistry.getInstrumentation().getTargetContext()).remove("history",URL);}
+    }
+    @Test public void freediscPanelsBecomeTransparentWithoutRemovingThemOrChangingTheirTimers(){
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            loadAt(scenario,"<div class='reklama-content-1'>Ad 1</div><div class='reklama-content-2'>Ad 2</div><video></video><script>window.timerTicks=0;setInterval(function(){timerTicks++},100)</script>","https://freedisc.pl/test,f-12345,film-mp4");
+            assertEquals("true",eval(scenario,"Array.from(document.querySelectorAll('.reklama-content-1,.reklama-content-2')).every(function(n){return getComputedStyle(n).opacity==='0'&&getComputedStyle(n).pointerEvents==='none'&&n.isConnected})"));
+            SystemClock.sleep(250);assertEquals("true",eval(scenario,"getComputedStyle(document.querySelector('video')).opacity==='1'&&timerTicks>0"));
+        }finally{new LocalLibrary(InstrumentationRegistry.getInstrumentation().getTargetContext()).remove("history","https://freedisc.pl/test,f-12345,film-mp4");}
+    }
+
 }
 

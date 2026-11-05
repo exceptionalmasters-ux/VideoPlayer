@@ -90,7 +90,7 @@ public final class MainActivity extends Activity {
     private long pendingTvTapUntil;
     private int pendingTvTapGeneration;
     private EpisodeSuggestions episodes;
-    private boolean nextEpisodeAutoPlay;
+    private boolean autoStartPending=true;
     private int playerUiFlags;
     private Button fullscreenControls;
 
@@ -98,7 +98,7 @@ public final class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        nextEpisodeAutoPlay=getIntent().getBooleanExtra("nextEpisodeAutoPlay",false);
+        autoStartPending=state==null&&!getIntent().getBooleanExtra("manualStart",false);
         library=new LocalLibrary(this);
         String launchUrl=sharedUrl(getIntent());
         if(launchUrl!=null&&state==null&&getIntent().getBooleanExtra("fromStart",false)){MovieLibrary.Item saved=library.find(launchUrl);if(saved!=null)library.progress(launchUrl,0,saved.duration,false);}
@@ -292,7 +292,7 @@ public final class MainActivity extends Activity {
                 ++presentationScan;
                 web.getSettings().setUseWideViewPort(true);
                 web.getSettings().setLoadWithOverviewMode(true);
-                ++pageGeneration;playbackFrames.clear();pendingTvTap="";
+                ++pageGeneration;playbackFrames.clear();pendingTvTap="";autoStartPending=!getIntent().getBooleanExtra("manualStart",false);
                 setCodeVisible(false);
                 diagnostics.add("page.start", url, 0);
                 address.setText(url);
@@ -305,7 +305,7 @@ public final class MainActivity extends Activity {
                 if (!loadFailed) status.setText("Strona załadowana • wybierz film i dotknij Play");
                 progress.setVisibility(View.GONE);
                 CookieManager.getInstance().flush();
-                if(television){web.evaluateJavascript(script("tv-play-tap.js")+";"+script("tv-media.js"),null);if(tvControlsAnchor!=null&&codeRow.getVisibility()!=View.VISIBLE)tvControlsAnchor.requestFocus();}
+                {web.evaluateJavascript(script("tv-play-tap.js")+";"+script("tv-media.js"),null);if(television&&tvControlsAnchor!=null&&codeRow.getVisibility()!=View.VISIBLE)tvControlsAnchor.requestFocus();}
                 inspectVerification(pageGeneration, 0);
                 if (UrlPolicy.isHome(url) && movieNavigation.target() != null) {
                     status.setText("Serwis otworzył stronę główną. Zachowuję wybrany film…");
@@ -398,7 +398,7 @@ public final class MainActivity extends Activity {
         } catch (IOException e) { return "''"; }
     }
     private void installDiagnostics() {
-        if(television&&WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)){
+        if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)){
             if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
                 WebViewCompat.addWebMessageListener(web,"vpTvTouch",UrlPolicy.mediaOrigins(),(view,message,origin,mainFrame,reply)->{
                     if(!mainFrame||!alive||!resumed||pendingTvTap.isEmpty()||pendingTvTapGeneration!=pageGeneration
@@ -428,7 +428,7 @@ public final class MainActivity extends Activity {
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, script("frame-fit.js"), UrlPolicy.mediaOrigins());
-            if(!television&&nextEpisodeAutoPlay)WebViewCompat.addDocumentStartJavaScript(web,script("tv-media.js"),UrlPolicy.mediaOrigins());
+            WebViewCompat.addDocumentStartJavaScript(web,script("hide-ad-panels.js"),UrlPolicy.mediaOrigins());
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -455,9 +455,15 @@ public final class MainActivity extends Activity {
                         if(playbackFrames.size()>32)return;
                         String token=java.util.UUID.randomUUID().toString();playbackFrames.put(token,MovieLibrary.key(movie));
                         MovieLibrary.Item saved=library.find(movie);
-                        JSONObject response=new JSONObject().put("token",token).put("position",saved==null?0:saved.position).put("duration",saved==null?0:saved.duration);
+                        JSONObject response=new JSONObject().put("token",token).put("position",saved==null?0:saved.position).put("duration",saved==null?0:saved.duration).put("autostart",autoStartPending);
                         reply.postMessage(response.toString());
                     }else if(MovieLibrary.key(movie).equals(playbackFrames.get(data.optString("token")))){
+                        String event=data.optString("event");
+                        if(event.startsWith("autoplay-")){
+                            if("autoplay-started".equals(event)||"autoplay-cancelled".equals(event)||"autoplay-expired".equals(event))autoStartPending=false;
+                            else if("autoplay-request".equals(event)&&autoStartPending&&!accessRequired&&(playerFullscreen||customView!=null))tvCommand("play");
+                            return;
+                        }
                         long position=data.optLong("position",-1),duration=data.optLong("duration",-1);boolean ended=data.optBoolean("ended");
                         library.progress(movie,position,duration,ended);
                         MovieLibrary.Item item=library.find(movie);
@@ -465,7 +471,7 @@ public final class MainActivity extends Activity {
                     }
                 }catch(Exception ignored){}
             });
-            WebViewCompat.addDocumentStartJavaScript(web,script("playback-progress.js"),origins);
+            WebViewCompat.addDocumentStartJavaScript(web,script("original-autostart.js")+";"+script("playback-progress.js"),origins);
             diagnostics.add("media.observer.enabled", null, 0);
         } else {
             diagnostics.add("media.observer.unsupported", null, 0);
@@ -571,7 +577,7 @@ public final class MainActivity extends Activity {
         });
     }
     private void tvCommand(String action) {
-        if(!television||!allowed(web.getUrl())||episodes!=null&&episodes.modal())return;
+        if(!allowed(web.getUrl())||episodes!=null&&episodes.modal())return;
         if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
         diagnostics.add("tv.command."+action,null,0);
         pendingTvTap=("toggle".equals(action)||"play".equals(action))?java.util.UUID.randomUUID().toString():"";
@@ -604,11 +610,6 @@ public final class MainActivity extends Activity {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
             diagnostics.add(automatic?"presentation.auto_fullscreen":"presentation.fullscreen",web.getUrl(),0);
-            if(nextEpisodeAutoPlay){
-                nextEpisodeAutoPlay=false;
-                if(television)tvCommand("play");
-                else web.evaluateJavascript(script("tv-media.js")+";window.__vpTvCommand && window.__vpTvCommand('play','');",null);
-            }
             if(!automatic&&television)toast("OK: pauza/wznów · lewo/prawo: 10 sekund · Wstecz: przyciski");
         });
     }

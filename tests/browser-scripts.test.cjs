@@ -461,3 +461,25 @@ test('replaced players cannot emit a false content end or advertisement state fo
   assert.equal(messages.at(-1).token,'new');assert.equal(messages.at(-1).ended,false);assert.equal(messages.at(-1).position,71);
   second.complete();assert.equal(messages.at(-1).ended,true);
 });
+
+test('autostart retries readiness, suspends in background, confirms playback and never undoes pause',()=>{
+  function fixture(){
+    const messages=[],handlers={};let tick,cleared=0,state='idle';
+    const document={hidden:false,querySelector:()=>null,addEventListener(){}};
+    const player={on:(event,fn)=>handlers[event]=fn,getState:()=>state};
+    const window={};vm.runInNewContext(asset('original-autostart.js'),{window,document,WeakSet,setInterval:fn=>(tick=fn,1),clearInterval:()=>cleared++});
+    window.__vpStartOriginalPlayer(player,event=>messages.push(event));
+    return {messages,handlers,document,tick:()=>tick(),state:v=>state=v,cleared:()=>cleared,window,player};
+  }
+  const f=fixture();assert.deepEqual(f.messages,['autoplay-request']);f.tick();assert.equal(f.messages.length,2);
+  f.document.hidden=true;for(let i=0;i<40;i++)f.tick();assert.equal(f.messages.length,2);
+  f.document.hidden=false;f.state('playing');f.tick();assert.equal(f.messages.at(-1),'autoplay-started');const n=f.messages.length;f.state('paused');f.tick();assert.equal(f.messages.length,n);assert.equal(f.cleared(),1);
+  const p=fixture();p.window.__vpCancelAutoStart();p.tick();assert.deepEqual(p.messages,['autoplay-request','autoplay-cancelled']);
+  const limit=fixture();for(let i=0;i<40;i++)limit.tick();assert.equal(limit.messages.filter(x=>x==='autoplay-request').length,30);assert.equal(limit.messages.at(-1),'autoplay-expired');
+});
+
+test('ad panel styling is scoped to Freedisc, idempotent and leaves player and timers intact',()=>{
+  function fixture(origin){const nodes=[];const document={head:{appendChild:n=>nodes.push(n)},getElementById:id=>nodes.find(n=>n.id===id),createElement:()=>({}),addEventListener(){}};vm.runInNewContext(asset('hide-ad-panels.js'),{location:{origin},document,MutationObserver:class{constructor(fn){this.fn=fn;}observe(){this.fn();}}});return nodes;}
+  const nodes=fixture('https://freedisc.pl');assert.equal(nodes.length,1);assert.equal(nodes[0].textContent,'.reklama-content-1,.reklama-content-2{opacity:0!important;pointer-events:none!important}');
+  for(const origin of ['https://vider.pl','https://freedisc.pl.evil.test','http://freedisc.pl'])assert.equal(fixture(origin).length,0);
+});

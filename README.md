@@ -209,3 +209,9 @@ Przy nazwach zawierających S01E01, S1E01 lub 1x01 aplikacja przygotowuje zapyta
 Tylko zakończone wyszukiwanie bez pasujących odcinków powoduje jedną próbę znalezienia S02E01 (następnego sezonu względem bieżącego). Ładowanie wyników, nierozpoznana odpowiedź, błąd sieci i ekran CAPTCHA nie oznaczają końca sezonu. Dopasowanie sprawdza nazwę serialu, sezon i odcinek; nie korzysta z zewnętrznego katalogu seriali.
 
 CAPTCHA / zgoda / logowanie zatrzymują ten sam plan wyszukiwania. Przed końcem filmu pojawia się jedynie małe powiadomienie (TV: strzałka w dół otwiera potwierdzenie). Po końcu otwiera się okno dostępu. Kod wpisuje użytkownik: zatwierdzenie Gotowe lub Zatwierdź wysyła go do oryginalnego formularza, a po potwierdzeniu aplikacja kontynuuje zapamiętane wyszukiwanie. Można wrócić do filmu bez anulowania oczekiwania. Błędy mają przyciski Ponów oraz Szukaj ręcznie z przygotowanym zapytaniem.
+
+### Autostart i plansze Freedisc (0.8.2)
+
+Po otwarciu filmu aplikacja czeka na oryginalny odtwarzacz i ponawia Play, maksymalnie 30 prób co 1,5 sekundy aktywnego oczekiwania. Próby wymagają aktywnego widoku filmu, zaufanej ramki i braku weryfikacji; kończą się po rozpoczęciu odtwarzania lub ręcznej pauzie. Oryginalny przycisk Play może otrzymać kontrolowany dotyk także na telefonie.
+
+Tylko na Freedisc dwie rozpoznane plansze `.reklama-content-1` i `.reklama-content-2` stają się przezroczyste i nie przechwytują dotyku. Elementy, ich skrypty, liczniki oraz obraz filmu pozostają w dokumencie. Warstwy Videra nie są ukrywane bez potwierdzonej struktury.
