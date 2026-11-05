@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-android-0.8.0
+  group: publish-android-0.8.1
   cancel-in-progress: false
 jobs:
   publish:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-debug
-          run-id: 42113174076
+          run-id: 42120755494
           github-token: ${{ github.token }}
           path: verified
       - name: Publish the verified universal APK
@@ -30,11 +30,11 @@ jobs:
           set -euo pipefail
           mapfile -t apks < <(find verified -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" VideoPlayer-0.8.0.apk
-          echo '4be6699d13d97bc53a7b5b8773bb887502fe8d9b4fd394052602e0f9a46105f0  VideoPlayer-0.8.0.apk' | sha256sum -c -
-          if gh release view android-v0.8.0 >/dev/null 2>&1; then
-            gh release download android-v0.8.0 --pattern VideoPlayer-0.8.0.apk --output existing.apk
-            echo '4be6699d13d97bc53a7b5b8773bb887502fe8d9b4fd394052602e0f9a46105f0  existing.apk' | sha256sum -c -
+          cp "${apks[0]}" VideoPlayer-0.8.1.apk
+          echo '41e08d9ef005c2cbd3c0d5a0e0d787199f3f4ed56fffd0999ee927dbc19649bd  VideoPlayer-0.8.1.apk' | sha256sum -c -
+          if gh release view android-v0.8.1 >/dev/null 2>&1; then
+            gh release download android-v0.8.1 --pattern VideoPlayer-0.8.1.apk --output existing.apk
+            echo '41e08d9ef005c2cbd3c0d5a0e0d787199f3f4ed56fffd0999ee927dbc19649bd  existing.apk' | sha256sum -c -
           else
-            gh release create android-v0.8.0 VideoPlayer-0.8.0.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.8.0 — Android i Android TV' --notes 'Kolejny odcinek: wyszukiwanie około 30 sekund przed końcem, kafelki nad filmem po zakończeniu i wybór pilotem lub dotykiem. Pierwszy odcinek następnego sezonu jest sprawdzany dopiero po potwierdzonym braku kolejnego odcinka. Przy kodzie antyspamowym aplikacja czeka na ręczne wpisanie i wznawia to samo wyszukiwanie. Testy telefonu i Android TV przeszły. SHA-256: 4be6699d13d97bc53a7b5b8773bb887502fe8d9b4fd394052602e0f9a46105f0' --prerelease
+            gh release create android-v0.8.1 VideoPlayer-0.8.1.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.8.1 — Android i Android TV' --notes 'Mniejsze kafelki kolejnego odcinka: wyszukiwanie 40 sekund przed końcem, propozycje 10 sekund przed końcem bez zatrzymania filmu. Kliknięcie otwiera pełny ekran i próbuje rozpocząć odtwarzanie przez oryginalny odtwarzacz. Ręczna weryfikacja kodem pozostaje aktywna. SHA-256: 41e08d9ef005c2cbd3c0d5a0e0d787199f3f4ed56fffd0999ee927dbc19649bd' --prerelease
           fi
