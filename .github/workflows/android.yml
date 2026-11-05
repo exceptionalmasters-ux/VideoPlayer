@@ -117,7 +117,9 @@ jobs:
             adb shell settings put secure show_ime_with_hard_keyboard 1
             adb shell wm size
             adb shell wm density
-            gradle --no-daemon --console=plain connectedDebugAndroidTest
+            gradle --no-daemon --console=plain connectedDebugAndroidTest || { adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png || true; adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png || true; exit 1; }
+            adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png
+            adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png
       - name: Upload keyboard test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,6 +127,8 @@ jobs:
           name: keyboard-test-reports
           path: |
             app/build/reports/androidTests/
+            app/build/reports/next-episode.png
+            app/build/reports/next-code.png
             app/build/outputs/androidTest-results/
           if-no-files-found: ignore
           retention-days: 14
@@ -174,8 +178,10 @@ jobs:
             adb shell settings put secure tv_user_setup_complete 1
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
-            gradle --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=pl.example.viderplayer.TvRemoteTest,pl.example.viderplayer.AutomaticPresentationTest,pl.example.viderplayer.CollectionsTest,pl.example.viderplayer.NextEpisodeTest || { adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png; exit 1; }
+            gradle --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=pl.example.viderplayer.TvRemoteTest,pl.example.viderplayer.AutomaticPresentationTest,pl.example.viderplayer.CollectionsTest,pl.example.viderplayer.NextEpisodeTest || { adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png || true; adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png || true; adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png; exit 1; }
             adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png
+            adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png
+            adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png
             adb pull /sdcard/Download/videoplayer-tv-cursor.png app/build/reports/tv-cursor.png
       - name: Upload TV reports
         if: always()

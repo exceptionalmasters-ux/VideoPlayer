@@ -77,7 +77,7 @@ final class EpisodeSuggestions {
         if(disposed||paused||flow==null)return;
         if(accessPanel!=null&&flow.stage!=EpisodeFlow.Stage.ACCESS)closeAccess();
         notice.setText(tv?"Kolejny odcinek wymaga potwierdzenia · ↓":"Kolejny odcinek wymaga potwierdzenia · dotknij");
-        notice.setVisibility(flow.stage==EpisodeFlow.Stage.ACCESS&&!flow.ended&&accessPanel==null?View.VISIBLE:View.GONE);
+        notice.setVisibility(flow.stage==EpisodeFlow.Stage.ACCESS&&(!flow.ended||flow.dismissed)&&accessPanel==null?View.VISIBLE:View.GONE);
         if(notice.getVisibility()==View.VISIBLE)notice.bringToFront();
         if(flow.ended&&!flow.dismissed){
             if(flow.stage==EpisodeFlow.Stage.ACCESS){if(accessPanel==null)showAccess();}

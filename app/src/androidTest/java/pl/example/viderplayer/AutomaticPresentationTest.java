@@ -134,7 +134,7 @@ public final class AutomaticPresentationTest {
         android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         LocalLibrary library=new LocalLibrary(context);library.opened(URL,"Resume fixture","");library.progress(URL,1234,7200,false);
         String outer="<!doctype html><body data-vp-test='resume'><div class='video-frame'><iframe src='https://vider.info/embed/video/autotest'></iframe></div></body>";
-        String child="<!doctype html><body><video></video><script>window.events={};window.seekedTo=-1;window.player={getState:function(){return 'playing'},on:function(n,f){events[n]=f},seek:function(p){seekedTo=p;setTimeout(function(){events.time({position:p,duration:7200})},20)}};window.jwplayer=function(){return player};</script></body>";
+        String child="<!doctype html><body><video></video><script>window.events={};window.seekedTo=-1;window.seekAcknowledged=false;window.player={getState:function(){return 'playing'},on:function(n,f){events[n]=f},seek:function(p){seekedTo=p;setTimeout(function(){events.time({position:p,duration:7200});seekAcknowledged=true},20)}};window.jwplayer=function(){return player};</script></body>";
         try(ActivityScenario<MainActivity> scenario=launch()){
             scenario.onActivity(activity->{WebView view=web(activity);view.stopLoading();WebViewClient original=view.getWebViewClient();
                 view.setWebViewClient(new WebViewClient(){
@@ -150,6 +150,9 @@ public final class AutomaticPresentationTest {
             eval(scenario,"document.querySelector('iframe').contentWindow.events.time({position:0,duration:7200});true");
             end=SystemClock.elapsedRealtime()+5000;
             while(!"1234".equals(eval(scenario,"document.querySelector('iframe').contentWindow.seekedTo"))){if(SystemClock.elapsedRealtime()>end)fail("Saved position not delivered into embed");SystemClock.sleep(100);}
+            // seekedTo records a request; wait for the asynchronous seek acknowledgement before playback advances.
+            end=SystemClock.elapsedRealtime()+5000;
+            while(!"true".equals(eval(scenario,"document.querySelector('iframe').contentWindow.seekAcknowledged"))){if(SystemClock.elapsedRealtime()>end)fail("Resume seek was not acknowledged");SystemClock.sleep(50);}
             eval(scenario,"var e=document.querySelector('iframe').contentWindow.events;e.time({position:1260,duration:7200});e.pause();true");
             end=SystemClock.elapsedRealtime()+5000;
             while(new LocalLibrary(context).find(URL).position!=1260){if(SystemClock.elapsedRealtime()>end)fail("Paused content time was not persisted");SystemClock.sleep(100);}

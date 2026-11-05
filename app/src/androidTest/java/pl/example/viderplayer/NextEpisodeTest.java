@@ -66,6 +66,29 @@ public final class NextEpisodeTest {
             });
         });
     }
+    private static void snapshot(String name){
+        try{for(String command:new String[]{"mkdir -p /sdcard/Download","screencap -p /sdcard/Download/"+name}){
+            android.os.ParcelFileDescriptor fd=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
+            try(java.io.InputStream in=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)){byte[] b=new byte[1024];while(in.read(b)!=-1){}}
+        }}catch(Exception e){throw new AssertionError(e);}
+    }
+    private static WebResourceRequest request(String url,boolean main){return new WebResourceRequest(){
+        @Override public Uri getUrl(){return Uri.parse(url);}
+        @Override public boolean isForMainFrame(){return main;}
+        @Override public boolean isRedirect(){return false;}
+        @Override public boolean hasGesture(){return false;}
+        @Override public String getMethod(){return "GET";}
+        @Override public java.util.Map<String,String> getRequestHeaders(){return java.util.Collections.emptyMap();}
+    };}
+    @Test public void verificationKeepsHttpsFramesWhileBlockingExternalMainNavigation(){
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            scenario.onActivity(a->{WebView view=ui(a).search().engine;WebViewClient client=view.getWebViewClient();
+                assertFalse(client.shouldOverrideUrlLoading(view,request("https://www.google.com/recaptcha/api2/anchor",false)));
+                assertTrue(client.shouldOverrideUrlLoading(view,request("intent://external-app",false)));
+                assertTrue(client.shouldOverrideUrlLoading(view,request("https://www.google.com/recaptcha/api2/anchor",true)));
+            });
+        }finally{cleanup();}
+    }
     private static void cleanup(){LocalLibrary l=new LocalLibrary(InstrumentationRegistry.getInstrumentation().getTargetContext());l.remove("history",URL);l.remove("history","https://freedisc.pl/u,f-56789,serial-testowy-s01e01-mp4");l.remove("history","https://vider.info/vid/+fnextone");}
     @Test public void prefetchIsSilentThenEndShowsOnlyTheRightEpisodeAndOkOpensTheCard(){
         Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();AtomicReference<Intent> opened=new AtomicReference<>();
@@ -75,7 +98,8 @@ public final class NextEpisodeTest {
             scenario.onActivity(a->ui(a).observe(URL,TITLE,70,100,false));
             await(scenario,a->ui(a).flow.stage==EpisodeFlow.Stage.READY,"Next episode was not prefetched");
             scenario.onActivity(a->{assertNull(ui(a).panel);assertNull(ui(a).accessPanel);assertEquals(2,ui(a).rows.length());assertFalse(ui(a).flow.seasonFallback);ui(a).observe(URL,TITLE,100,100,true);});
-            await(scenario,a->ui(a).panel!=null&&(!TvUi.enabled(a)||ui(a).cards.getChildAt(0).hasFocus()),"End overlay or first-card focus missing");
+            await(scenario,a->ui(a).panel!=null&&ui(a).panel.isLaidOut()&&(!TvUi.enabled(a)||ui(a).cards.getChildAt(0).hasFocus()),"End overlay or first-card focus missing");
+            snapshot("videoplayer-next-episode.png");
             assertEquals("true",eval(scenario,"!!document.querySelector('[data-next-fixture=movie]')"));
             Instrumentation.ActivityMonitor monitor=new Instrumentation.ActivityMonitor(){@Override public Instrumentation.ActivityResult onStartActivity(Intent intent){if(intent.getComponent()!=null&&MainActivity.class.getName().equals(intent.getComponent().getClassName())){opened.set(new Intent(intent));return new Instrumentation.ActivityResult(0,null);}return null;}};
             instrumentation.addMonitor(monitor);
@@ -105,7 +129,10 @@ public final class NextEpisodeTest {
             scenario.onActivity(a->{assertNull(ui(a).accessPanel);assertEquals(View.VISIBLE,ui(a).notice.getVisibility());try{Field f=EpisodeSearch.class.getDeclaredField("deadline");f.setAccessible(true);f.setLong(ui(a).worker,SystemClock.elapsedRealtime()-60000);}catch(Exception e){throw new AssertionError(e);}});
             SystemClock.sleep(1600);scenario.onActivity(a->{assertEquals(EpisodeFlow.Stage.ACCESS,ui(a).flow.stage);assertFalse(ui(a).flow.seasonFallback);ui(a).observe(URL,TITLE,100,100,true);});
             await(scenario,a->ui(a).accessPanel!=null&&ui(a).code!=null&&ui(a).code.isShown()&&ui(a).code.hasFocus(),"End must show and focus the manual code field");
-            scenario.onActivity(a->{ui(a).code.setText("manual-code");ui(a).code.onEditorAction(EditorInfo.IME_ACTION_DONE);});
+            scenario.onActivity(a->{ui(a).code.setText("manual-");a.onBackPressed();assertNull(ui(a).accessPanel);assertEquals(View.VISIBLE,ui(a).notice.getVisibility());assertEquals(EpisodeFlow.Stage.ACCESS,ui(a).flow.stage);ui(a).notice.performClick();});
+            await(scenario,a->ui(a).code!=null&&ui(a).code.isShown()&&ui(a).code.hasFocus(),"Waiting code must be reachable again after returning to the film");
+            snapshot("videoplayer-next-code.png");
+            scenario.onActivity(a->{assertEquals("manual-",ui(a).code.getText().toString());ui(a).code.setText("manual-code");ui(a).code.onEditorAction(EditorInfo.IME_ACTION_DONE);});
             await(scenario,a->ui(a).flow.stage==EpisodeFlow.Stage.READY&&ui(a).panel!=null&&ui(a).accessPanel==null,"Manual confirmation did not resume the same episode query");
             scenario.onActivity(a->{assertEquals("Serial Testowy S01E02",ui(a).flow.target.query());assertFalse(ui(a).flow.seasonFallback);assertEquals(2,ui(a).rows.length());});
             assertEquals(1,requests.size());assertEquals("true",eval(scenario,"!!document.querySelector('[data-next-fixture=movie]')"));

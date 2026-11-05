@@ -39,12 +39,16 @@ final class EpisodeSearch {
         engine.setVisibility(View.INVISIBLE);
         WebSettings settings=engine.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setMediaPlaybackRequiresUserGesture(true);settings.setSupportMultipleWindows(false);
+        settings.setMediaPlaybackRequiresUserGesture(true);settings.setSupportMultipleWindows(true);settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setUserAgentString(source.userAgent(settings.getUserAgentString()));
         settings.setUseWideViewPort(source==SiteSource.FREEDISC);settings.setLoadWithOverviewMode(source==SiteSource.FREEDISC);
         CookieManager.getInstance().setAcceptThirdPartyCookies(engine,true);
+        engine.setWebChromeClient(new WebChromeClient(){
+            @Override public boolean onCreateWindow(WebView view,boolean dialog,boolean gesture,android.os.Message result){return false;}
+        });
         engine.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
+                if(!request.isForMainFrame())return !"https".equalsIgnoreCase(request.getUrl().getScheme());
                 String url=request.getUrl().toString();
                 if(source==SiteSource.FREEDISC&&SiteSource.isMobileFreediscUrl(url)){
                     if(running&&!returnedHome){returnedHome=true;handler.post(()->{if(running)engine.loadUrl(source.home+"/");});}
