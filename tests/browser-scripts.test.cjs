@@ -478,8 +478,3 @@ test('autostart retries readiness, suspends in background, confirms playback and
   const limit=fixture();for(let i=0;i<40;i++)limit.tick();assert.equal(limit.messages.filter(x=>x==='autoplay-request').length,30);assert.equal(limit.messages.at(-1),'autoplay-expired');
 });
 
-test('ad panel styling is scoped to Freedisc, idempotent and leaves player and timers intact',()=>{
-  function fixture(origin){const nodes=[];const document={head:{appendChild:n=>nodes.push(n)},getElementById:id=>nodes.find(n=>n.id===id),createElement:()=>({}),addEventListener(){}};vm.runInNewContext(asset('hide-ad-panels.js'),{location:{origin},document,MutationObserver:class{constructor(fn){this.fn=fn;}observe(){this.fn();}}});return nodes;}
-  const nodes=fixture('https://freedisc.pl');assert.equal(nodes.length,1);assert.equal(nodes[0].textContent,'.reklama-content-1,.reklama-content-2{opacity:0!important;pointer-events:none!important}');
-  for(const origin of ['https://vider.pl','https://freedisc.pl.evil.test','http://freedisc.pl'])assert.equal(fixture(origin).length,0);
-});

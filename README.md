@@ -215,3 +215,7 @@ CAPTCHA / zgoda / logowanie zatrzymują ten sam plan wyszukiwania. Przed końcem
 Po otwarciu filmu aplikacja czeka na oryginalny odtwarzacz i ponawia Play, maksymalnie 30 prób co 1,5 sekundy aktywnego oczekiwania. Próby wymagają aktywnego widoku filmu, zaufanej ramki i braku weryfikacji; kończą się po rozpoczęciu odtwarzania lub ręcznej pauzie. Oryginalny przycisk Play może otrzymać kontrolowany dotyk także na telefonie.
 
 Tylko na Freedisc dwie rozpoznane plansze `.reklama-content-1` i `.reklama-content-2` stają się przezroczyste i nie przechwytują dotyku. Elementy, ich skrypty, liczniki oraz obraz filmu pozostają w dokumencie. Warstwy Videra nie są ukrywane bez potwierdzonej struktury.
+
+### Poprawka ładowania (0.8.3)
+
+Wycofane całe ukrywanie reklam: skrypt CSS nie jest już dołączany, a oryginalne plansze pozostają bez zmian. Automatyczny widok filmu jest sprawdzany już od początku nawigacji, także gdy zewnętrzny zasób nie pozwala stronie zgłosić onPageFinished. Testy odtwarzają brak tego callbacku na Freedisc i automatyczny start opóźnionego odtwarzacza w ramce. Diagnostyka zapisuje rozpoczęcie skanowania i wynik autostartu bez treści strony ani komunikatów konsoli.

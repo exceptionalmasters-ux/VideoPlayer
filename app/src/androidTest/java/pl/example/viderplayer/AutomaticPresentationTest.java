@@ -34,7 +34,8 @@ public final class AutomaticPresentationTest {
     }
     private static void load(ActivityScenario<MainActivity> scenario,String body){loadAt(scenario,body,URL);}
     private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination){loadAt(scenario,body,destination,"");}
-    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination,String child){
+    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination,String child){loadAt(scenario,body,destination,child,true);}
+    private static void loadAt(ActivityScenario<MainActivity> scenario,String body,String destination,String child,boolean finished){
         final String html="<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body data-vp-test='presentation'>"+body+"</body></html>";
         scenario.onActivity(activity->{
             WebView web=web(activity);web.stopLoading();
@@ -42,7 +43,7 @@ public final class AutomaticPresentationTest {
             web.setWebViewClient(new WebViewClient(){
                 @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){return new WebResourceResponse("text/html","UTF-8",new java.io.ByteArrayInputStream((request.isForMainFrame()?html:child).getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
                 @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap bitmap){original.onPageStarted(view,url,bitmap);}
-                @Override public void onPageFinished(WebView view,String url){original.onPageFinished(view,url);}
+                @Override public void onPageFinished(WebView view,String url){if(finished)original.onPageFinished(view,url);}
             });
             web.loadUrl(destination+"?fixture="+java.util.UUID.randomUUID());
         });
@@ -196,20 +197,27 @@ public final class AutomaticPresentationTest {
             +"window.events={};window.trustedClicks=0;window.playState='idle';setTimeout(function(){window.player={getState:function(){return playState},on:function(n,f){events[n]=f},play:function(){},pause:function(){playState='paused';if(events.pause)events.pause()}};window.jwplayer=function(){return player}},1800);"
             +"document.querySelector('button').addEventListener('click',function(e){if(e.isTrusted){trustedClicks++;playState='playing';this.setAttribute('aria-label','Pause')}});</script></body></html>";
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(intent)){
-            loadAt(scenario,"<div class='video-frame'><iframe style='border:0' src='https://vider.info/embed/video/autotest'></iframe></div>",URL,child);
+            loadAt(scenario,"<div class='video-frame'><iframe style='border:0' src='https://vider.info/embed/video/autotest'></iframe></div>",URL,child,false);
             await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Autostart movie did not enter fullscreen");
             await(scenario,a->!(Boolean)field(a,"autoStartPending"),"Delayed original Play was not confirmed");
             String frame="document.querySelector('iframe').contentWindow";
             assertEquals("1",eval(scenario,frame+".trustedClicks"));assertEquals("\"playing\"",eval(scenario,frame+".playState"));
+            scenario.onActivity(a->assertFalse(((DiagnosticLog)field(a,"diagnostics")).export().contains("page.finished")));
             eval(scenario,frame+".player.pause();true");SystemClock.sleep(3200);
             assertEquals("\"paused\"",eval(scenario,frame+".playState"));assertEquals("1",eval(scenario,frame+".trustedClicks"));
         }finally{new LocalLibrary(InstrumentationRegistry.getInstrumentation().getTargetContext()).remove("history",URL);}
     }
-    @Test public void freediscPanelsBecomeTransparentWithoutRemovingThemOrChangingTheirTimers(){
+
+
+    @Test public void freediscLoadingWithoutFinishedCallbackStillEntersFullscreenAndLeavesAdsUnchanged(){
         try(ActivityScenario<MainActivity> scenario=launch()){
-            loadAt(scenario,"<div class='reklama-content-1'>Ad 1</div><div class='reklama-content-2'>Ad 2</div><video></video><script>window.timerTicks=0;setInterval(function(){timerTicks++},100)</script>","https://freedisc.pl/test,f-12345,film-mp4");
-            assertEquals("true",eval(scenario,"Array.from(document.querySelectorAll('.reklama-content-1,.reklama-content-2')).every(function(n){return getComputedStyle(n).opacity==='0'&&getComputedStyle(n).pointerEvents==='none'&&n.isConnected})"));
-            SystemClock.sleep(250);assertEquals("true",eval(scenario,"getComputedStyle(document.querySelector('video')).opacity==='1'&&timerTicks>0"));
+            String url="https://freedisc.pl/test,f-12345,film-mp4";
+            scenario.onActivity(a->((MovieNavigation)field(a,"movieNavigation")).select(url));
+            loadAt(scenario,"<div class='video-frame'><iframe src='https://freedisc.pl/embed/video/12345'></iframe></div>",url,"<body><div class='reklama-content-1' style='position:fixed;inset:0;z-index:100'>Advertisement</div><div class='reklama-content-2'>Second advertisement</div><video></video></body>",false);
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Freedisc waited for missing page.finished");
+            assertEquals("true",eval(scenario,"document.querySelector('iframe').contentDocument.querySelectorAll('.reklama-content-1,.reklama-content-2').length===2&&!document.getElementById('vp-ad-panels-style')&&!document.querySelector('iframe').contentDocument.getElementById('vp-ad-panels-style')"));
+            assertEquals("\"1\"",eval(scenario,"document.querySelector('iframe').contentWindow.getComputedStyle(document.querySelector('iframe').contentDocument.querySelector('.reklama-content-1')).opacity"));
+            scenario.onActivity(a->{String log=((DiagnosticLog)field(a,"diagnostics")).export();assertTrue(log.contains("presentation.loading_scan"));assertFalse(log.contains("page.finished"));});
         }finally{new LocalLibrary(InstrumentationRegistry.getInstrumentation().getTargetContext()).remove("history","https://freedisc.pl/test,f-12345,film-mp4");}
     }
 

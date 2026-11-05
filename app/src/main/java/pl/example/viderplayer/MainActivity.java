@@ -298,6 +298,15 @@ public final class MainActivity extends Activity {
                 address.setText(url);
                 status.setText("Ładowanie…");
                 progress.setVisibility(View.VISIBLE);
+                // Third-party frames can keep the document loading indefinitely.
+                // Presentation is driven by DOM readiness, not the final network callback.
+                final int generation=pageGeneration;
+                sessionHandler.postDelayed(()->{
+                    if(alive&&resumed&&generation==pageGeneration&&allowed(web.getUrl())){
+                        diagnostics.add("presentation.loading_scan",web.getUrl(),0);
+                        inspectVerification(generation,0);
+                    }
+                },500);
             }
             @Override public void onPageFinished(WebView view, String url) {
                 diagnostics.add("page.finished", url, 0);
@@ -428,7 +437,6 @@ public final class MainActivity extends Activity {
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, script("frame-fit.js"), UrlPolicy.mediaOrigins());
-            WebViewCompat.addDocumentStartJavaScript(web,script("hide-ad-panels.js"),UrlPolicy.mediaOrigins());
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -460,7 +468,7 @@ public final class MainActivity extends Activity {
                     }else if(MovieLibrary.key(movie).equals(playbackFrames.get(data.optString("token")))){
                         String event=data.optString("event");
                         if(event.startsWith("autoplay-")){
-                            if("autoplay-started".equals(event)||"autoplay-cancelled".equals(event)||"autoplay-expired".equals(event))autoStartPending=false;
+                            if("autoplay-started".equals(event)||"autoplay-cancelled".equals(event)||"autoplay-expired".equals(event)){autoStartPending=false;diagnostics.add(event.replace("autoplay-","autoplay."),frame,0);}
                             else if("autoplay-request".equals(event)&&autoStartPending&&!accessRequired&&(playerFullscreen||customView!=null))tvCommand("play");
                             return;
                         }
@@ -486,11 +494,14 @@ public final class MainActivity extends Activity {
     }
     private void inspectPresentation(int generation,int scan,int attempt){
         if(!currentPresentation(generation,scan))return;
-        web.evaluateJavascript(script("search-state.js"),value->{
+        String expected=web.getUrl();
+        String inspect="(function(){if(!document.body||location.href!=="+JSONObject.quote(expected)+")return JSON.stringify({stage:'loading'});return "+script("search-state.js")+";})()";
+        web.evaluateJavascript(inspect,value->{
             if(!currentPresentation(generation,scan))return;
             String stage="results";
             try{stage=new JSONObject((String)new JSONTokener(value).nextValue()).optString("stage","results");}
             catch(Exception ignored){ }
+            if("loading".equals(stage)){schedulePresentation(generation,scan,attempt,true);return;}
             final boolean blocked=!"results".equals(stage);accessRequired=blocked;
             if(blocked){
                 presentation.accessBlocked();
