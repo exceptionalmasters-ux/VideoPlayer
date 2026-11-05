@@ -428,6 +428,7 @@ public final class MainActivity extends Activity {
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, script("frame-fit.js"), UrlPolicy.mediaOrigins());
+            if(!television&&nextEpisodeAutoPlay)WebViewCompat.addDocumentStartJavaScript(web,script("tv-media.js"),UrlPolicy.mediaOrigins());
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
                 && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
