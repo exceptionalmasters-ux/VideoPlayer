@@ -122,7 +122,7 @@ final class EpisodeSuggestions {
         footer.add(button(actions,"Szukaj ręcznie",()->host.manual(query(),source)));
         footer.add(button(actions,"Zamknij",this::dismiss));focusRows.add(footer);TvFocus.connect(focusRows);
         int available=root.getHeight()>0?root.getHeight():activity.getResources().getDisplayMetrics().heightPixels;
-        FrameLayout.LayoutParams pos=new FrameLayout.LayoutParams(-1,Math.max(dp(240),available*2/5),Gravity.BOTTOM);root.addView(panel,pos);panel.bringToFront();rendered=marker;
+        FrameLayout.LayoutParams pos=new FrameLayout.LayoutParams(-1,Math.min(available,Math.max(dp(310),available*2/5)),Gravity.BOTTOM);root.addView(panel,pos);panel.bringToFront();rendered=marker;
         if(tv){View first=cards.getChildCount()>0?cards.getChildAt(0):footer.get(0);first.post(first::requestFocus);}
         diagnostics.add("episode.panel.shown",null,rows.length());
     }
