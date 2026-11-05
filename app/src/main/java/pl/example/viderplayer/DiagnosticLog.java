@@ -44,6 +44,29 @@ public final class DiagnosticLog {
             entries.addLast(item);
         } catch (JSONException ignored) { }
     }
+    public synchronized void adObservation(String message,String frameUrl){
+        if(message==null||message.length()>4096||!UrlPolicy.mediaOrigin(frameUrl))return;
+        try{
+            JSONObject input=new JSONObject(message);String event=input.optString("event");
+            if(!event.equals("ad-layer")&&!event.equals("ad-player"))return;
+            JSONObject item=new JSONObject().put("elapsedMs",android.os.SystemClock.elapsedRealtime()-started).put("event",event.replace('-','.')).put("frame",UrlPolicy.redact(frameUrl));
+            if(event.equals("ad-layer")){
+                String kind=input.optString("kind");
+                if(!java.util.Arrays.asList("freedisc-panel-1","freedisc-panel-2","adblock-message","background-wait","jw-vast").contains(kind))return;
+                item.put("kind",kind);
+                for(String key:new String[]{"present","visible","coversVideo"})item.put(key,input.optBoolean(key));
+                for(String key:new String[]{"width","height"})item.put(key,Math.max(0,Math.min(16384,input.optInt(key))));
+            }else{
+                String signal=input.optString("signal"),state=input.optString("state");
+                if(!java.util.Arrays.asList("snapshot","adStarted","adComplete","adSkipped","adError").contains(signal))return;
+                item.put("signal",signal).put("state",java.util.Arrays.asList("idle","buffering","paused","playing","complete","error").contains(state)?state:"unknown");
+                item.put("errorCode",Math.max(0,Math.min(999999,input.optInt("errorCode"))));
+            }
+            item.put("videoPresent",input.optBoolean("videoPresent")).put("sourceAssigned",input.optBoolean("sourceAssigned")).put("paused",input.optBoolean("paused",true));
+            item.put("readyState",Math.max(0,Math.min(4,input.optInt("readyState")))).put("networkState",Math.max(0,Math.min(3,input.optInt("networkState"))));
+            if(entries.size()>=500)entries.removeFirst();entries.addLast(item);
+        }catch(JSONException ignored){}
+    }
     public synchronized String export() {
         try {
             JSONObject report = new JSONObject();
@@ -64,3 +87,4 @@ public final class DiagnosticLog {
     public synchronized void clear() { entries.clear(); }
     public synchronized int size() { return entries.size(); }
 }
+

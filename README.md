@@ -219,3 +219,5 @@ Tylko na Freedisc dwie rozpoznane plansze `.reklama-content-1` i `.reklama-conte
 ### Poprawka ładowania (0.8.3)
 
 Wycofane całe ukrywanie reklam: skrypt CSS nie jest już dołączany, a oryginalne plansze pozostają bez zmian. Automatyczny widok filmu jest sprawdzany już od początku nawigacji, także gdy zewnętrzny zasób nie pozwala stronie zgłosić onPageFinished. Testy odtwarzają brak tego callbacku na Freedisc i automatyczny start opóźnionego odtwarzacza w ramce. Diagnostyka zapisuje rozpoczęcie skanowania i wynik autostartu bez treści strony ani komunikatów konsoli.
+
+Diagnostyka reklam w 0.8.3 obserwuje rozpoznane plansze Freedisc, komunikat o adblocku, maskę oczekiwania i kontener JW VAST. Zapisuje tylko obecność, widoczność, rozmiar, zasłanianie środka wideo, stan odtwarzacza i zdarzenia reklamy. Nie zapisuje treści, adresów reklam, formularzy ani danych konta. Obserwacja nie zmienia strony; wpisy są ograniczone i emitowane po zmianie stanu.

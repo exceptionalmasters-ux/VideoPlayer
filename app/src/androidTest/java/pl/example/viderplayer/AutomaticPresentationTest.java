@@ -221,5 +221,13 @@ public final class AutomaticPresentationTest {
         }finally{new LocalLibrary(InstrumentationRegistry.getInstrumentation().getTargetContext()).remove("history","https://freedisc.pl/test,f-12345,film-mp4");}
     }
 
+    @Test public void adDiagnosticsDropsTextAddressesAndUnknownLayerKinds()throws Exception{
+        DiagnosticLog log=new DiagnosticLog();
+        log.adObservation("{\"event\":\"ad-layer\",\"kind\":\"unknown\"}","https://freedisc.pl");assertEquals(0,log.size());
+        log.adObservation("{\"event\":\"ad-layer\",\"kind\":\"freedisc-panel-1\",\"visible\":true,\"coversVideo\":true,\"text\":\"secret\",\"source\":\"https://private.example/?token=secret\",\"width\":999999}","https://freedisc.pl");
+        org.json.JSONObject item=new org.json.JSONObject(log.export()).getJSONArray("events").getJSONObject(0);
+        assertTrue(item.getBoolean("visible"));assertTrue(item.getBoolean("coversVideo"));assertEquals(16384,item.getInt("width"));assertFalse(item.has("text"));assertFalse(item.has("source"));assertFalse(log.export().contains("secret"));
+    }
+
 }
 

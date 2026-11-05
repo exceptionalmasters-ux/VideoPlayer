@@ -478,3 +478,19 @@ test('autostart retries readiness, suspends in background, confirms playback and
   const limit=fixture();for(let i=0;i<40;i++)limit.tick();assert.equal(limit.messages.filter(x=>x==='autoplay-request').length,30);assert.equal(limit.messages.at(-1),'autoplay-expired');
 });
 
+
+test('ad diagnostics observes coverage and ad events without changing the page or exposing text or addresses',()=>{
+  const messages=[],handlers={};let tick,covered=true;
+  const video={currentSrc:'https://private.example/movie?token=secret',readyState:2,networkState:1,paused:false,getBoundingClientRect:()=>({left:0,top:0,width:640,height:360})};
+  const node={parentElement:null,getBoundingClientRect:()=>({width:640,height:360}),contains:hit=>hit===node,textContent:'private advertisement'};
+  const document={hidden:false,querySelector:()=>video,querySelectorAll:selector=>selector==='.reklama-content-1'?[node]:[],elementFromPoint:()=>covered?node:video,addEventListener(){}};
+  const window={vpDiagnostics:{postMessage:s=>messages.push(JSON.parse(s))},jwplayer:()=>({on:(n,f)=>handlers[n]=f,getState:()=> 'playing'})};
+  const context={window,document,Map,WeakSet,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),setInterval:fn=>tick=fn};
+  // Keep a stable player so repeated samples do not register it twice.
+  const player=window.jwplayer();window.jwplayer=()=>player;
+  vm.runInNewContext(asset('ad-diagnostics.js'),context);
+  const panel=messages.find(x=>x.kind==='freedisc-panel-1');assert.equal(panel.visible,true);assert.equal(panel.coversVideo,true);assert.equal(panel.sourceAssigned,true);
+  const n=messages.length;tick();assert.equal(messages.length,n);covered=false;tick();assert.equal(messages.at(-1).coversVideo,false);
+  handlers.adError({code:123,message:'secret message'});assert.equal(messages.at(-1).errorCode,123);assert.equal(messages.at(-1).signal,'adError');
+  const output=JSON.stringify(messages);assert.equal(/secret|private|https:/.test(output),false);assert.equal(node.textContent,'private advertisement');
+});

@@ -445,9 +445,10 @@ public final class MainActivity extends Activity {
                 (view, message, sourceOrigin, mainFrame, reply) -> {
                     if (message.getType() == androidx.webkit.WebMessageCompat.TYPE_STRING) {
                         diagnostics.media(message.getData(), sourceOrigin.toString());
+                        diagnostics.adObservation(message.getData(),sourceOrigin.toString());
                     }
                 });
-            WebViewCompat.addDocumentStartJavaScript(web, script("media-diagnostics.js"), origins);
+            WebViewCompat.addDocumentStartJavaScript(web, script("media-diagnostics.js")+";"+script("ad-diagnostics.js"), origins);
             WebViewCompat.addWebMessageListener(web,"vpPlayback",origins,(view,message,origin,mainFrame,reply)->{
                 if(!alive||message.getType()!=androidx.webkit.WebMessageCompat.TYPE_STRING)return;
                 try{
