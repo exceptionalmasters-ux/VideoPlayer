@@ -201,3 +201,11 @@ Odczyt używa zdarzeń czasu treści JW Player, pomija zdarzenia reklam i nie us
 ### OK / Play na Android TV (0.7.4)
 
 OK uruchamia widoczny, oryginalny przycisk Play odtwarzacza bez włączania kursora, także po wznowieniu zapisanego filmu. Sterowanie pauzą i przewijaniem nadal korzysta z odtwarzacza. Aplikacja uwzględnia położenie i skalowanie osadzonej ramki oraz stan pauzy filmu po przewinięciu. Dotknięcie jest dozwolone tylko przez 2 sekundy po poleceniu OK / Play z pilota, jednorazowo dla tego polecenia. Zasłonięty przycisk nie jest dotykany.
+
+### Kolejny odcinek (Android / Android TV, 0.8.0)
+
+Przy nazwach zawierających S01E01, S1E01 lub 1x01 aplikacja przygotowuje zapytanie o następny odcinek w tym samym źródle, około 30 sekund przed końcem treści. Osobny WebView wyszukiwania nie przeładowuje filmu. Po zdarzeniu zakończenia treści natywny panel nad filmem pokazuje maksymalnie 8 pasujących wersji, z wyborem dotykiem lub pilotem. Nie ma automatycznego otwierania odcinka. Wstecz zamyka panel.
+
+Tylko zakończone wyszukiwanie bez pasujących odcinków powoduje jedną próbę znalezienia S02E01 (następnego sezonu względem bieżącego). Ładowanie wyników, nierozpoznana odpowiedź, błąd sieci i ekran CAPTCHA nie oznaczają końca sezonu. Dopasowanie sprawdza nazwę serialu, sezon i odcinek; nie korzysta z zewnętrznego katalogu seriali.
+
+CAPTCHA / zgoda / logowanie zatrzymują ten sam plan wyszukiwania. Przed końcem filmu pojawia się jedynie małe powiadomienie (TV: strzałka w dół otwiera potwierdzenie). Po końcu otwiera się okno dostępu. Kod wpisuje użytkownik: zatwierdzenie Gotowe lub Zatwierdź wysyła go do oryginalnego formularza, a po potwierdzeniu aplikacja kontynuuje zapamiętane wyszukiwanie. Można wrócić do filmu bez anulowania oczekiwania. Błędy mają przyciski Ponów oraz Szukaj ręcznie z przygotowanym zapytaniem.

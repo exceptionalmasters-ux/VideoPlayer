@@ -89,6 +89,7 @@ public final class MainActivity extends Activity {
     private String pendingTvTap="";
     private long pendingTvTapUntil;
     private int pendingTvTapGeneration;
+    private EpisodeSuggestions episodes;
     private int playerUiFlags;
     private Button fullscreenControls;
 
@@ -223,6 +224,19 @@ public final class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
+        episodes=new EpisodeSuggestions(this,root,diagnostics,new EpisodeSuggestions.Host(){
+            @Override public void beforePanel(){pendingTvTap="";if(pointer!=null)pointer.stop();}
+            @Override public void restoreFocus(){if(web!=null&&alive)web.requestFocus();}
+            @Override public void open(JSONObject item){
+                String url=item.optString("url");if(!UrlPolicy.isMovie(url))return;
+                library.opened(url,item.optString("title"),item.optString("thumbnail"));
+                startActivity(new Intent(MainActivity.this,MainActivity.class).setAction(Intent.ACTION_VIEW).setData(Uri.parse(url)).putExtra("movieTitle",item.optString("title")).putExtra("movieThumbnail",item.optString("thumbnail")));
+                finish();
+            }
+            @Override public void manual(String query,SiteSource source){
+                startActivity(new Intent(MainActivity.this,SearchActivity.class).putExtra("searchQuery",query).putExtra("searchSource",source.name()).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();
+            }
+        });
         installDiagnostics();
         diagnostics.add("app.start", HOME, 0);
         web.setWebViewClient(new WebViewClient() {
@@ -268,6 +282,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
+                if(episodes!=null)episodes.reset();
                 loadFailed = false;movieFocused=false;accessRequired=false;if(pointer!=null)pointer.stop();
                 if(UrlPolicy.isMovie(url))library.opened(url,MovieLibrary.key(url).equals(launchMovieKey)?launchMovieTitle:"",MovieLibrary.key(url).equals(launchMovieKey)?launchMovieThumbnail:"");
                 if(playerFullscreen)exitPlayerFullscreen(false);
@@ -340,6 +355,7 @@ public final class MainActivity extends Activity {
                 previousUiFlags = getWindow().getDecorView().getSystemUiVisibility();
                 content.setVisibility(View.GONE);
                 root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+                if(episodes!=null)episodes.overlayTop();
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -384,7 +400,7 @@ public final class MainActivity extends Activity {
             if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
                 WebViewCompat.addWebMessageListener(web,"vpTvTouch",UrlPolicy.mediaOrigins(),(view,message,origin,mainFrame,reply)->{
                     if(!mainFrame||!alive||!resumed||pendingTvTap.isEmpty()||pendingTvTapGeneration!=pageGeneration
-                        ||android.os.SystemClock.uptimeMillis()>pendingTvTapUntil||!web.isShown()||customView!=null
+                        ||android.os.SystemClock.uptimeMillis()>pendingTvTapUntil||!web.isShown()||customView!=null||episodes!=null&&episodes.modal()
                         ||codeRow.getVisibility()==View.VISIBLE||pointer!=null&&pointer.active()
                         ||!UrlPolicy.playback(web.getUrl(),movieNavigation.target())
                         ||message.getType()!=androidx.webkit.WebMessageCompat.TYPE_STRING)return;
@@ -439,7 +455,10 @@ public final class MainActivity extends Activity {
                         JSONObject response=new JSONObject().put("token",token).put("position",saved==null?0:saved.position).put("duration",saved==null?0:saved.duration);
                         reply.postMessage(response.toString());
                     }else if(MovieLibrary.key(movie).equals(playbackFrames.get(data.optString("token")))){
-                        library.progress(movie,data.optLong("position",-1),data.optLong("duration",-1),data.optBoolean("ended"));
+                        long position=data.optLong("position",-1),duration=data.optLong("duration",-1);boolean ended=data.optBoolean("ended");
+                        library.progress(movie,position,duration,ended);
+                        MovieLibrary.Item item=library.find(movie);
+                        if(episodes!=null&&item!=null)episodes.observe(movie,item.title,position,duration,ended);
                     }
                 }catch(Exception ignored){}
             });
@@ -549,7 +568,7 @@ public final class MainActivity extends Activity {
         });
     }
     private void tvCommand(String action) {
-        if(!television||!allowed(web.getUrl()))return;
+        if(!television||!allowed(web.getUrl())||episodes!=null&&episodes.modal())return;
         if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
         diagnostics.add("tv.command."+action,null,0);
         pendingTvTap=("toggle".equals(action)||"play".equals(action))?java.util.UUID.randomUUID().toString():"";
@@ -599,6 +618,7 @@ public final class MainActivity extends Activity {
         if(tvControlsAnchor!=null)tvControlsAnchor.requestFocus();
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(episodes!=null){if(episodes.key(event,playerFullscreen||customView!=null))return true;if(episodes.modal())return super.dispatchKeyEvent(event);}
         if(!television)return super.dispatchKeyEvent(event);
         if(pointer!=null&&pointer.key(event))return true;
         if(event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP)togglePointer();return true;}
@@ -774,6 +794,7 @@ public final class MainActivity extends Activity {
         if (callback != null) callback.onCustomViewHidden();
     }
     @Override public void onBackPressed() {
+        if(episodes!=null&&episodes.back())return;
         if(pointer!=null&&pointer.active()){pointer.stop();return;}
         if(customView!=null){exitFullscreen();if(playerFullscreen)exitPlayerFullscreen();else presentation.userControlled();}
         else if(playerFullscreen)exitPlayerFullscreen();
@@ -787,12 +808,14 @@ public final class MainActivity extends Activity {
         web.saveState(out); super.onSaveInstanceState(out);
     }
     @Override protected void onPause() {
+        if(episodes!=null)episodes.pause();
         resumed = false;pendingTvTap=""; if(pointer!=null)pointer.stop(); sessionHandler.removeCallbacksAndMessages(null);
         web.evaluateJavascript("window.__vpFlushProgress && window.__vpFlushProgress()",null);
         web.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }
     @Override protected void onResume() {
         super.onResume(); resumed = true;
+        if(episodes!=null)episodes.resume();
         TvUi.immersive(this);
         if (web != null) {
             web.onResume();
@@ -802,6 +825,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         alive = false;
+        if(episodes!=null)episodes.dispose();
         sessionHandler.removeCallbacksAndMessages(null);
         exitFullscreen();
         if(playerFullscreen)exitPlayerFullscreen(false);

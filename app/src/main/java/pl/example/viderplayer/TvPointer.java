@@ -45,6 +45,7 @@ final class TvPointer extends View {
             x=Math.max(1,Math.min(root.getWidth()-1,x));y=Math.max(1,Math.min(root.getHeight()-1,y));invalidate();
         }return true;
     }
+    void dispose(){stop();root.removeView(this);root.removeView(close);}
     private void click(){
         long time=SystemClock.uptimeMillis();
         MotionEvent down=MotionEvent.obtain(time,time,MotionEvent.ACTION_DOWN,x,y,0),up=MotionEvent.obtain(time,time+50,MotionEvent.ACTION_UP,x,y,0);

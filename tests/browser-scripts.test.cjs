@@ -434,3 +434,30 @@ test('dedicated Play key stays playing instead of toggling the original control 
   vm.runInNewContext(asset('tv-media.js'),{window,document:{head:null,addEventListener(){}}});
   window.__vpTvCommand('play','nonce');assert.deepEqual(calls,['play']);
 });
+
+function outcomeFixture({text='',spinner=false,links=[],scoped=true}={}){
+  const area={innerText:text,getBoundingClientRect:()=>({height:30}),querySelectorAll:s=>s==='a[href]'?links:s.includes('spinner')&&spinner?[{getBoundingClientRect:()=>({height:15})}]:[]};
+  const body={innerText:'',querySelectorAll:()=>[]};
+  return JSON.parse(vm.runInNewContext(asset('search-outcome.js'),{document:{body,querySelector:s=>scoped?area:null},URL,location:{href:'https://freedisc.pl/search/all/Serial%20S01E02'},getComputedStyle:()=>({visibility:'visible'})}));
+}
+test('only a rendered empty-result message confirms an empty episode search',()=>{
+  assert.equal(outcomeFixture({text:'Brak wyników wyszukiwania dla frazy: Serial S01E02'}).empty,true);
+  const loading=outcomeFixture({text:'Proszę czekać, szukam...',spinner:true});assert.equal(loading.loading,true);assert.equal(loading.empty,false);
+  assert.equal(outcomeFixture().empty,false);assert.equal(outcomeFixture({scoped:false}).empty,false);
+});
+test('search completion counts only provider file links and does not turn a spinner into an empty result',()=>{
+  const links=['/vid/+fepisode','https://freedisc.pl/u,f-123,serial-s01e02-mp4','https://ads.example/u,f-1','https://user:secret@freedisc.pl/u,f-2'].map(href=>({getAttribute:()=>href}));
+  const result=outcomeFixture({links});assert.equal(result.links,2);assert.equal(result.loading,false);assert.equal(result.scoped,true);
+});
+test('replaced players cannot emit a false content end or advertisement state for next-episode suggestions',()=>{
+  let discover;const messages=[],first={},second={};let current;
+  function player(events){return {getState:()=> 'playing',on:(name,fn)=>events[name]=fn,seek(){}};}
+  current=player(first);
+  const window={vpPlayback:{postMessage:raw=>messages.push(JSON.parse(raw))},jwplayer:()=>current,addEventListener(){}};window.parent=window;
+  vm.runInNewContext(asset('playback-progress.js'),{window,document:{querySelectorAll:()=>[],addEventListener(){}},location:{href:'https://vider.info/embed/video/test'},setInterval:fn=>{discover=fn;},Date:{now:()=>10000}});
+  window.vpPlayback.onmessage({data:JSON.stringify({token:'old',position:0,duration:100})});first.time({position:70,duration:100});
+  current=player(second);discover();window.vpPlayback.onmessage({data:JSON.stringify({token:'new',position:0,duration:100})});second.time({position:71,duration:100});
+  first.complete();first.adStarted();second.pause();
+  assert.equal(messages.at(-1).token,'new');assert.equal(messages.at(-1).ended,false);assert.equal(messages.at(-1).position,71);
+  second.complete();assert.equal(messages.at(-1).ended,true);
+});

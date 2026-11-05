@@ -45,11 +45,11 @@
       const p=typeof window.jwplayer==='function'?window.jwplayer():null;
       if(!p||typeof p.on!=='function'||!p.getState||!p.getState()||players.has(p))return;
       players.add(p);player=p;token='';saved=null;checkpoint=null;ad=false;restoring=false;
-      p.on('adStarted',function(){ad=true;});
-      ['adComplete','adSkipped','adError'].forEach(function(event){p.on(event,function(){ad=false;});});
+      p.on('adStarted',function(){if(player===p)ad=true;});
+      ['adComplete','adSkipped','adError'].forEach(function(event){p.on(event,function(){if(player===p)ad=false;});});
       p.on('time',function(data){if(player===p)time(data);});
-      p.on('pause',function(){if(player===p)flush();});p.on('seeked',function(){if(checkpoint)sentAt=0;});
-      p.on('complete',function(){if(!ad&&!restoring&&checkpoint){checkpoint.ended=true;checkpoint.position=checkpoint.duration;flush();}});
+      p.on('pause',function(){if(player===p)flush();});p.on('seeked',function(){if(player===p&&checkpoint)sentAt=0;});
+      p.on('complete',function(){if(player===p&&!ad&&!restoring&&checkpoint){checkpoint.ended=true;checkpoint.position=checkpoint.duration;flush();}});
       send('hello',{});
     }catch(_){}
   }

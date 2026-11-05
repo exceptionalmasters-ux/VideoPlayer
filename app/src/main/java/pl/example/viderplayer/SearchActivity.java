@@ -105,6 +105,7 @@ public final class SearchActivity extends Activity {
         root.addView(caption);
         selectedSource = SiteSource.restore(saved != null ? saved.getString("source")
             : getSharedPreferences("sources", MODE_PRIVATE).getString("selected", SiteSource.VIDER.name()));
+        if(saved==null&&getIntent().hasExtra("searchSource"))selectedSource=SiteSource.restore(getIntent().getStringExtra("searchSource"));
         LinearLayout sourceRow = new LinearLayout(this);
         sourceRow.setPadding(dp(16), 0, dp(16), 0);
         sourceRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -280,12 +281,9 @@ public final class SearchActivity extends Activity {
             if (results.length() > 0) render();
             else if (!query.getText().toString().trim().isEmpty()&&"results".equals(saved.getString("collection","results"))) search();
         }
+        if(saved==null)applyEpisodeQuery(getIntent());
         String initialCollection=saved!=null?saved.getString("collection","results"):getIntent().getStringExtra("collection");
         if(initialCollection!=null&&!"results".equals(initialCollection))showCollection(initialCollection);
-    }
-    @Override protected void onNewIntent(Intent intent){
-        super.onNewIntent(intent);setIntent(intent);
-        showCollection(intent.getStringExtra("collection"));
     }
     private static java.util.List<View> children(android.view.ViewGroup row){java.util.List<View> views=new java.util.ArrayList<>();for(int i=0;i<row.getChildCount();i++)views.add(row.getChildAt(i));return views;}
     private void wireSearchNavigation(){
@@ -316,6 +314,17 @@ public final class SearchActivity extends Activity {
             .setMessage("Pozycje zostaną usunięte tylko z tej listy na tym urządzeniu.")
             .setPositiveButton("Wyczyść",(d,w)->{library.clear(selected);showCollection(selected);})
             .setNegativeButton("Anuluj",null).show();
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);
+        String selected=intent.getStringExtra("collection");
+        if(intent.hasExtra("searchQuery"))applyEpisodeQuery(intent);else showCollection(selected);
+    }
+    private void applyEpisodeQuery(Intent intent){
+        String title=intent.getStringExtra("searchQuery");if(title==null||title.trim().isEmpty())return;
+        SiteSource source=SiteSource.restore(intent.getStringExtra("searchSource"));
+        selectSource(source);sourcePicker.setSelection(source.ordinal());
+        query.setText(title.substring(0,Math.min(title.length(),220)));lastSearchAt=0;query.post(this::search);
     }
     private void cardActions(JSONObject item){
         final String url=item.optString("url");
