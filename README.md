@@ -221,3 +221,11 @@ Tylko na Freedisc dwie rozpoznane plansze `.reklama-content-1` i `.reklama-conte
 Wycofane całe ukrywanie reklam: skrypt CSS nie jest już dołączany, a oryginalne plansze pozostają bez zmian. Automatyczny widok filmu jest sprawdzany już od początku nawigacji, także gdy zewnętrzny zasób nie pozwala stronie zgłosić onPageFinished. Testy odtwarzają brak tego callbacku na Freedisc i automatyczny start opóźnionego odtwarzacza w ramce. Diagnostyka zapisuje rozpoczęcie skanowania i wynik autostartu bez treści strony ani komunikatów konsoli.
 
 Diagnostyka reklam w 0.8.3 obserwuje rozpoznane plansze Freedisc, komunikat o adblocku, maskę oczekiwania i kontener JW VAST. Zapisuje tylko obecność, widoczność, rozmiar, zasłanianie środka wideo, stan odtwarzacza i zdarzenia reklamy. Nie zapisuje treści, adresów reklam, formularzy ani danych konta. Obserwacja nie zmienia strony; wpisy są ograniczone i emitowane po zmianie stanu.
+
+### Linki embed i wyszukiwanie zastępcze (0.9.0)
+
+Adres Freedisc `/embed/video/8307530?match=1` jest pełnoprawnym filmem, także po wklejeniu i otwarciu przez Android. Historia i ulubione identyfikują go tym samym numerem co link pliku; bezpieczny parametr `match=1` zostaje zachowany.
+
+Błąd, nierozpoznana odpowiedź lub limit czasu wyszukiwarki serwisu uruchamia jedno zapytanie Google o tytuł z nazwą serwisu i ograniczeniem `site:`. Wyniki są filtrowane ponownie w aplikacji do dokładnych domen wybranego źródła i adresów filmów, a następnie pokazywane jako zwykłe kafelki. Przycisk Google pozwala zacząć od tej drogi. Jawne potwierdzenie braku wyników w wyszukiwarce serwisu nie oznacza awarii. Ta sama alternatywa działa przy przygotowaniu kolejnego odcinka, w oddzielnym WebView.
+
+Google może wymagać zgody lub CAPTCHA. Oryginalny formularz jest wtedy dostępny wewnątrz aplikacji, wyszukiwanie zachowuje zapytanie i czeka na ręczną czynność użytkownika. Nie ma automatycznego rozwiązywania CAPTCHA ani otwierania przeglądarki zewnętrznej. Błąd Google kończy wyszukiwanie bez zapętlonych ponowień. Testy lokalne sprawdzają parser, filtry domen, zachowanie formularza i otwieranie embed; nie gwarantują dostępności Google na danym urządzeniu.

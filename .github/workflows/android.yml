@@ -178,7 +178,7 @@ jobs:
             adb shell settings put secure tv_user_setup_complete 1
             adb shell input keyevent KEYCODE_WAKEUP
             adb shell wm dismiss-keyguard
-            gradle --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=pl.example.viderplayer.TvRemoteTest,pl.example.viderplayer.AutomaticPresentationTest,pl.example.viderplayer.CollectionsTest,pl.example.viderplayer.NextEpisodeTest || { adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png || true; adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png || true; adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png; exit 1; }
+            gradle --no-daemon --console=plain connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=pl.example.viderplayer.TvRemoteTest,pl.example.viderplayer.AutomaticPresentationTest,pl.example.viderplayer.CollectionsTest,pl.example.viderplayer.NextEpisodeTest,pl.example.viderplayer.GoogleFallbackTest || { adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png || true; adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png || true; adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png; exit 1; }
             adb pull /sdcard/Download/videoplayer-tv.png app/build/reports/tv-results.png
             adb pull /sdcard/Download/videoplayer-next-episode.png app/build/reports/next-episode.png
             adb pull /sdcard/Download/videoplayer-next-code.png app/build/reports/next-code.png

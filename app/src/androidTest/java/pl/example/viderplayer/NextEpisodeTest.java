@@ -143,7 +143,9 @@ public final class NextEpisodeTest {
             ConcurrentLinkedQueue<String> requests=new ConcurrentLinkedQueue<>();provider(scenario,path->"<div id='search_files_result'><i class='icon-spinner'>…</i> Proszę czekać, szukam...</div>",requests);
             scenario.onActivity(a->ui(a).observe(URL,TITLE,70,100,false));await(scenario,a->ui(a).worker.engine.getProgress()==100&&!requests.isEmpty(),"Search fixture missing");
             scenario.onActivity(a->{try{Field f=EpisodeSearch.class.getDeclaredField("deadline");f.setAccessible(true);f.setLong(ui(a).worker,SystemClock.elapsedRealtime()-1);}catch(Exception e){throw new AssertionError(e);}});
-            await(scenario,a->ui(a).flow.stage==EpisodeFlow.Stage.FAILED,"Unfinished provider search did not stop with an error");
+            await(scenario,a->ui(a).worker.google!=null,"Unfinished provider search did not try Google");
+            scenario.onActivity(a->{try{java.lang.reflect.Method fail=GoogleFallback.class.getDeclaredMethod("fail",String.class);fail.setAccessible(true);fail.invoke(ui(a).worker.google,"Google unavailable fixture");}catch(Exception e){throw new AssertionError(e);}});
+            await(scenario,a->ui(a).flow.stage==EpisodeFlow.Stage.FAILED,"Failed Google fallback did not stop with an error");
             scenario.onActivity(a->{assertFalse(ui(a).flow.seasonFallback);assertEquals("Serial Testowy S01E02",ui(a).flow.target.query());});assertEquals(1,requests.size());
         }finally{cleanup();}
     }

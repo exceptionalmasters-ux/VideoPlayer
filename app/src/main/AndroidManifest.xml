@@ -10,6 +10,15 @@
             android:enableOnBackInvokedCallback="false"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="freedisc.pl" /><data android:host="www.freedisc.pl" />
+                <data android:host="vider.pl" /><data android:host="www.vider.pl" />
+                <data android:host="vider.info" /><data android:host="www.vider.info" />
+            </intent-filter>
+            <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
@@ -24,3 +33,4 @@
         </activity>
     </application>
 </manifest>
+

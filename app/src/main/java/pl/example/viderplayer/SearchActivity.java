@@ -74,6 +74,9 @@ public final class SearchActivity extends Activity {
     private final java.util.List<java.util.List<View>> tvRows=new java.util.ArrayList<>();
     private java.util.List<View> tvLastRow=new java.util.ArrayList<>();
     private SiteSource selectedSource = SiteSource.VIDER;
+    private GoogleFallback google;
+    private String requestedTitle;
+    private boolean fallbackUsed,forceGoogle;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle saved) {
@@ -136,6 +139,7 @@ public final class SearchActivity extends Activity {
         root.addView(input);
         LinearLayout actions = new LinearLayout(this);
         addButton(actions, "Mam link", this::pasteLink);
+        addButton(actions,"Google",()->{forceGoogle=true;lastSearchAt=0;search();forceGoogle=false;});
         addButton(actions, "Raport", this::exportReport);
         root.addView(actions);
         LinearLayout collections = new LinearLayout(this);
@@ -198,6 +202,7 @@ public final class SearchActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return !"https".equals(request.getUrl().getScheme());
                 String target = request.getUrl().toString();
+                if(google!=null)return true;
                 if (selectedSource == SiteSource.FREEDISC && SiteSource.isMobileFreediscUrl(target)) {
                     diagnostics.add("search.mobile_redirect", null, 0);
                     if (searchRunning && !mobileRedirectRetried) {
@@ -228,6 +233,7 @@ public final class SearchActivity extends Activity {
                 if (searchRunning && SiteSource.fromUrl(url) == selectedSource) navigationStarted = true;
             }
             @Override public void onPageFinished(WebView view, String url) {
+                if(google!=null)return;
                 CookieManager.getInstance().flush();
                 diagnostics.add("search.page", url, 0);
                 diagnostics.add("search.finished_kind." + UrlPolicy.pageKind(url), null, 0);
@@ -246,6 +252,7 @@ public final class SearchActivity extends Activity {
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
+                    if(fallbackUsed)return;
                     diagnostics.add("search.network_error", request.getUrl().toString(), error.getErrorCode());
                     if (searchRunning) failSearch("Nie udało się połączyć z " + selectedSource.label
                         + ". Wybierz Pokaż stronę lub zapisz Raport.");
@@ -380,6 +387,7 @@ public final class SearchActivity extends Activity {
         engine.stopLoading();
         dismissVerification();
         lastSearchAt = now;
+        requestedTitle=title;fallbackUsed=false;previewButton.setText("Pokaż stronę");
         lastHttpError = 0;
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(), 0);
         query.clearFocus();
@@ -406,6 +414,7 @@ public final class SearchActivity extends Activity {
         diagnostics.add("search.source." + selectedSource.name().toLowerCase(java.util.Locale.ROOT), null, 0);
         armSearchTimeout();
         // Freedisc's own search button routes from its initialized desktop page.
+        if(forceGoogle){startGoogle();return;}
         engine.loadUrl(selectedSource == SiteSource.FREEDISC ? selectedSource.home + "/" : requestedSearch);
     }
     private void routeFreedisc(int token, int attempt) {
@@ -433,6 +442,7 @@ public final class SearchActivity extends Activity {
         });
     }
     private void stopSearch() {
+        if(google!=null){GoogleFallback previous=google;google=null;previous.dispose();}
         searchRunning = false;
         ++requestGeneration;
         ++scanToken;
@@ -455,11 +465,27 @@ public final class SearchActivity extends Activity {
         handler.postDelayed(searchTimeout, SEARCH_TIMEOUT_MS);
     }
     private void failSearch(String message) {
+        if(searchRunning&&!fallbackUsed&&requestedTitle!=null){startGoogle();return;}
         stopSearch();
         engine.stopLoading();
         dismissVerification();
+        previewButton.setText("Pokaż stronę");
         previewButton.setVisibility(requestedSearch == null ? View.GONE : View.VISIBLE);
         status.setText(message);
+    }
+    private void startGoogle(){
+        if(fallbackUsed||requestedTitle==null)return;
+        fallbackUsed=true;++scanToken;++requestGeneration;pauseSearchTimeout();engine.stopLoading();dismissVerification();
+        final int generation=requestGeneration;final SiteSource source=selectedSource;
+        status.setText("Wyszukiwarka "+source.label+" niedostępna — szukam przez Google…");previewButton.setVisibility(View.GONE);
+        google=new GoogleFallback(this,screen,source,diagnostics,new GoogleFallback.Listener(){
+            private boolean valid(){return active&&searchRunning&&generation==requestGeneration&&source==selectedSource;}
+            @Override public void results(JSONArray rows){if(!valid())return;results=rows;searchResults=rows;collection="results";render();status.setText("Wyniki Google · "+source.label+" · "+rows.length());}
+            @Override public void access(){if(!valid())return;previewButton.setText("Potwierdzenie Google");previewButton.setVisibility(View.VISIBLE);status.setText("Google wymaga ręcznego potwierdzenia. Zapytanie pozostaje bez zmian.");google.showAccess();}
+            @Override public void closed(){if(valid()){previewButton.setVisibility(View.VISIBLE);status.setText("Google czeka na potwierdzenie — wybierz Potwierdzenie Google lub rozpocznij nowe wyszukiwanie.");}}
+            @Override public void failed(String message){if(valid())failSearch(message);}
+        });
+        google.start(requestedTitle);
     }
     private void retryInspection() {
         if (!searchRunning) { searchRunning = true; ++requestGeneration; }
@@ -467,6 +493,7 @@ public final class SearchActivity extends Activity {
         inspect(++scanToken, 0);
     }
     private void previewSearch() {
+        if(google!=null){google.showAccess();return;}
         if (requestedSearch == null || SiteSource.fromUrl(requestedSearch) != selectedSource) return;
         diagnostics.add("search.preview_open", engine.getUrl(), 0);
         searchRunning = true;
@@ -486,6 +513,7 @@ public final class SearchActivity extends Activity {
         } else retryInspection();
     }
     private void inspect(int token, int attempt) {
+        if (google!=null)return;
         if (!active || token != scanToken || (!searchRunning && verificationPanel == null)
                 || SiteSource.fromUrl(engine.getUrl()) != selectedSource) return;
         engine.evaluateJavascript(asset("search-state.js"), value -> {
@@ -532,10 +560,7 @@ public final class SearchActivity extends Activity {
                         JSONObject item = input.optJSONObject(i);
                         if (item == null || !UrlPolicy.isMovie(item.optString("url"))
                                 || SiteSource.fromUrl(item.optString("url")) != selectedSource) continue;
-                        String path = Uri.parse(item.optString("url")).getPath();
-                        String key = selectedSource == SiteSource.FREEDISC
-                            ? path.substring(path.indexOf(",f-") + 3).split(",")[0]
-                            : path.substring(path.lastIndexOf('+'));
+                        String key=MovieLibrary.key(item.optString("url"));
                         if (!seen.add(key)) continue;
                         String name = item.optString("title").replaceAll("[\\p{Cntrl}]", " ").trim();
                         if (name.isEmpty()) continue;
@@ -552,9 +577,11 @@ public final class SearchActivity extends Activity {
                 handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
             } else {
                 diagnostics.add("search.empty_or_unrecognized", engine.getUrl(), 0);
-                failSearch(lastHttpError >= 400
-                    ? "Serwis odpowiedział błędem HTTP " + lastHttpError + ". Wyślij raport wyszukiwania, jeśli problem się powtarza."
-                    : "Nie odczytano filmów. Wybierz Pokaż stronę, spróbuj krótszego tytułu lub zapisz Raport.");
+                engine.evaluateJavascript(asset("search-outcome.js"),raw->{
+                    if(!active||token!=scanToken||google!=null)return;
+                    try{JSONObject outcome=new JSONObject((String)new JSONTokener(raw).nextValue());if(outcome.optBoolean("empty")&&!outcome.optBoolean("loading")&&lastHttpError<400){results=new JSONArray();searchResults=results;render();return;}}catch(Exception ignored){}
+                    failSearch("Wyszukiwarka serwisu nie zwróciła rozpoznanych wyników.");
+                });
             }
         });
     }
@@ -722,6 +749,7 @@ public final class SearchActivity extends Activity {
         CookieManager.getInstance().flush();
     }
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if(google!=null&&google.key(event))return true;
         if(pointer!=null&&pointer.key(event))return true;
         if(television&&verificationPanel!=null&&event.getKeyCode()==android.view.KeyEvent.KEYCODE_MENU){if(event.getAction()==android.view.KeyEvent.ACTION_UP)togglePointer();return true;}
         if(television&&verificationPanel!=null&&engine.hasFocus()){
@@ -738,6 +766,7 @@ public final class SearchActivity extends Activity {
         return super.dispatchKeyEvent(event);
     }
     @Override public void onBackPressed() {
+        if(google!=null&&google.back())return;
         if(pointer!=null&&pointer.active()){pointer.stop();return;}
         if (verificationPanel != null) cancelVerification();
         else super.onBackPressed();
@@ -896,6 +925,7 @@ public final class SearchActivity extends Activity {
     }
     @Override protected void onPause() {
         active = false; if(pointer!=null)pointer.stop(); pauseSearchTimeout(); handler.removeCallbacksAndMessages(null);
+        if(google!=null)google.pause();
         engine.onPause(); CookieManager.getInstance().flush(); super.onPause();
     }
     @Override protected void onResume() {
@@ -905,6 +935,7 @@ public final class SearchActivity extends Activity {
         else if(engine!=null&&!searchRunning&&results.length()>0)render();
         if(television&&grid!=null&&grid.getChildCount()>0&&verificationPanel==null)
             grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
+        if(google!=null){google.resume();return;}
         if (engine != null) {
             engine.onResume();
             if (searchRunning && verificationPanel == null) armSearchTimeout();
@@ -913,6 +944,7 @@ public final class SearchActivity extends Activity {
     }
     @Override protected void onDestroy() {
         active = false; handler.removeCallbacksAndMessages(null); thumbnails.close();
+        if(google!=null){google.dispose();google=null;}
         dismissVerification();
         android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();
         if (owner != null) owner.removeView(engine);

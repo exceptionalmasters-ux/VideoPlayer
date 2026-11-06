@@ -16,6 +16,7 @@ final class EpisodeSearch {
         void access(String stage);
         void results(JSONArray rows);
         void failed(String message);
+        default void accessClosed(){}
     }
     final WebView engine;
     final FrameLayout host;
@@ -30,6 +31,9 @@ final class EpisodeSearch {
     private EpisodePlan wanted;
     private long deadline,lastSubmit;
     private Runnable pending;
+    GoogleFallback google;
+    private boolean fallbackUsed;
+    private String queryTitle;
     @SuppressLint("SetJavaScriptEnabled")
     EpisodeSearch(Activity activity,FrameLayout root,SiteSource source,DiagnosticLog diagnostics,Listener listener){
         this.activity=activity;this.source=source;this.listener=listener;this.diagnostics=diagnostics;
@@ -59,7 +63,7 @@ final class EpisodeSearch {
             }
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon){loaded=false;httpError=0;if(inAccess){accessSubmitted=true;deadline=SystemClock.elapsedRealtime()+30000;}}
             @Override public void onPageFinished(WebView view,String url){loaded=SiteSource.fromUrl(view.getUrl())==source;CookieManager.getInstance().flush();schedule(100);}
-            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(running&&request.isForMainFrame())fail("Nie udało się połączyć z "+source.label+". Możesz ponowić to samo wyszukiwanie.");}
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(running&&!fallbackUsed&&request.isForMainFrame())fail("Nie udało się połączyć z "+source.label+". Możesz ponowić to samo wyszukiwanie.");}
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){if(running&&request.isForMainFrame())httpError=response.getStatusCode();}
         });
     }
@@ -71,12 +75,13 @@ final class EpisodeSearch {
     void start(String query){
         if(disposed)return;
         generation++;handler.removeCallbacksAndMessages(null);running=false;engine.stopLoading();
+        if(google!=null){google.dispose();google=null;}fallbackUsed=false;queryTitle=query;
         wanted=EpisodePlan.parse(query);target=source.searchUrl(query);httpError=0;accessSubmitted=false;loaded=false;routed=false;returnedHome=false;routeAttempts=0;inAccess=false;accessStage="";returnToQuery=false;
         running=true;deadline=SystemClock.elapsedRealtime()+30000;diagnostics.add("episode.search.start",null,0);listener.searching();
         engine.onResume();
         engine.loadUrl(source==SiteSource.FREEDISC?source.home+"/":target);schedule(1000);
     }
-    private boolean valid(int token){return !disposed&&!paused&&running&&generation==token;}
+    private boolean valid(int token){return !disposed&&!paused&&running&&generation==token&&google==null;}
     private void schedule(long delay){
         if(disposed||paused||!running)return;
         if(pending!=null)handler.removeCallbacks(pending);
@@ -166,8 +171,22 @@ final class EpisodeSearch {
         lastSubmit=SystemClock.elapsedRealtime();
         engine.evaluateJavascript(asset("verification-submit.js"),value->{if("true".equals(value)){accessSubmitted=true;deadline=SystemClock.elapsedRealtime()+30000;}CookieManager.getInstance().flush();schedule(300);});
     }
-    private void fail(String message){if(disposed||!running)return;running=false;handler.removeCallbacksAndMessages(null);engine.onPause();diagnostics.add("episode.search.failed",null,0);listener.failed(message);}
-    void pause(){paused=true;handler.removeCallbacksAndMessages(null);engine.onPause();}
-    void resume(){if(disposed)return;paused=false;if(running){engine.onResume();deadline=SystemClock.elapsedRealtime()+30000;schedule(100);}}
-    void dispose(){if(disposed)return;disposed=true;running=false;generation++;handler.removeCallbacksAndMessages(null);engine.stopLoading();if(engine.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)engine.getParent()).removeView(engine);if(host.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)host.getParent()).removeView(host);engine.destroy();}
+    private void fail(String message){
+        if(disposed||!running)return;
+        if(!fallbackUsed){
+            fallbackUsed=true;handler.removeCallbacksAndMessages(null);engine.stopLoading();engine.onPause();final int token=generation;listener.searching();
+            google=new GoogleFallback(activity,(FrameLayout)host.getParent(),source,diagnostics,new GoogleFallback.Listener(){
+                private boolean current(){return !disposed&&running&&generation==token;}
+                @Override public void results(JSONArray rows){if(!current())return;running=false;inAccess=false;listener.results(rows);}
+                @Override public void access(){if(current()){inAccess=true;listener.access("google");}}
+                @Override public void closed(){if(current())listener.accessClosed();}
+                @Override public void failed(String reason){if(current())terminalFailure(reason);}
+            });google.start(queryTitle);return;
+        }
+        terminalFailure(message);
+    }
+    private void terminalFailure(String message){if(disposed||!running)return;running=false;handler.removeCallbacksAndMessages(null);engine.onPause();diagnostics.add("episode.search.failed",null,0);listener.failed(message);}
+    void pause(){if(google!=null)google.pause();paused=true;handler.removeCallbacksAndMessages(null);engine.onPause();}
+    void resume(){if(disposed)return;paused=false;if(google!=null){google.resume();return;}if(running){engine.onResume();deadline=SystemClock.elapsedRealtime()+30000;schedule(100);}}
+    void dispose(){if(disposed)return;disposed=true;if(google!=null){google.dispose();google=null;}running=false;generation++;handler.removeCallbacksAndMessages(null);engine.stopLoading();if(engine.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)engine.getParent()).removeView(engine);if(host.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)host.getParent()).removeView(host);engine.destroy();}
 }

@@ -55,6 +55,7 @@ final class EpisodeSuggestions {
             worker=new EpisodeSearch(activity,root,source,diagnostics,new EpisodeSearch.Listener(){
                 @Override public void searching(){if(disposed||flow==null)return;flow.searching();error="";accessStage="";update();}
                 @Override public void access(String stage){if(disposed||flow==null)return;boolean reopen=accessPanel!=null&&!stage.equals(accessStage);accessStage=stage;flow.access();if(reopen)closeAccess();update();if(reopen&&accessPanel==null)showAccess();}
+                @Override public void accessClosed(){if(flow!=null&&flow.ended)flow.dismissed=true;update();host.restoreFocus();}
                 @Override public void failed(String message){if(disposed||flow==null)return;flow.failed();error=message;update();}
                 @Override public void results(JSONArray found){
                     if(disposed||flow==null)return;
@@ -129,6 +130,7 @@ final class EpisodeSuggestions {
     void showAccess(){
         if(disposed||worker==null||flow==null||flow.stage!=EpisodeFlow.Stage.ACCESS||accessPanel!=null)return;
         removePanel();host.beforePanel();notice.setVisibility(View.GONE);flow.dismissed=false;
+        if(worker.google!=null){worker.google.showAccess();return;}
         accessPanel=new LinearLayout(activity);accessPanel.setOrientation(LinearLayout.VERTICAL);accessPanel.setPadding(dp(tv?24:8),dp(8),dp(tv?24:8),dp(8));accessPanel.setBackgroundColor(Color.rgb(17,24,32));
         accessPanel.addView(text("Potwierdź dostęp · "+query(),tv?20:18));
         accessPanel.addView(text("Wpisz kod ręcznie lub dokończ zgodę / logowanie na stronie. Potem automatycznie wznowimy to samo wyszukiwanie.",tv?15:13));
@@ -165,8 +167,9 @@ final class EpisodeSuggestions {
         root.removeView(accessPanel);accessPanel=null;code=null;host.restoreFocus();
     }
     void overlayTop(){if(accessPanel!=null){if(accessPointer!=null)accessPointer.stop();accessPanel.bringToFront();}else if(panel!=null)panel.bringToFront();else if(notice.getVisibility()==View.VISIBLE)notice.bringToFront();}
-    boolean modal(){return panel!=null||accessPanel!=null;}
+    boolean modal(){return panel!=null||accessPanel!=null||worker!=null&&worker.google!=null&&worker.google.accessOpen();}
     boolean key(KeyEvent event,boolean fullscreen){
+        if(worker!=null&&worker.google!=null&&worker.google.key(event))return true;
         if(accessPointer!=null&&accessPointer.key(event))return true;
         if(tv&&accessPanel!=null&&event.getKeyCode()==KeyEvent.KEYCODE_MENU){if(event.getAction()==KeyEvent.ACTION_UP&&accessPointer!=null)accessPointer.toggle();return true;}
         if(tv&&accessPanel==null&&panel==null&&fullscreen&&notice.getVisibility()==View.VISIBLE&&event.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN){if(event.getAction()==KeyEvent.ACTION_UP)showAccess();return true;}
@@ -178,6 +181,7 @@ final class EpisodeSuggestions {
         return false;
     }
     boolean back(){
+        if(worker!=null&&worker.google!=null&&worker.google.back())return true;
         if(accessPointer!=null&&accessPointer.active()){accessPointer.stop();return true;}
         if(accessPanel!=null){if(flow!=null&&flow.ended)flow.dismissed=true;closeAccess();update();return true;}
         if(panel!=null){dismiss();return true;}return false;

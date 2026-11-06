@@ -494,3 +494,34 @@ test('ad diagnostics observes coverage and ad events without changing the page o
   handlers.adError({code:123,message:'secret message'});assert.equal(messages.at(-1).errorCode,123);assert.equal(messages.at(-1).signal,'adError');
   const output=JSON.stringify(messages);assert.equal(/secret|private|https:/.test(output),false);assert.equal(node.textContent,'private advertisement');
 });
+
+function googleFixture(entries,source='FREEDISC',options={}){
+  const url=new URL(options.url||'https://www.google.com/search?q=fixture');
+  const anchors=entries.map(e=>({textContent:e.text||'',getAttribute:n=>n==='href'?e.href:n==='title'?e.title||null:null,querySelector:s=>s==='h3,[role="heading"]'&&e.heading?{textContent:e.heading}:s==='img'&&e.image?{currentSrc:e.image,src:e.image,getAttribute:()=>null}:null}));
+  const visible={getBoundingClientRect:()=>({width:100,height:100})};
+  const document={querySelector:s=>s==='#topstuff'&&options.empty?{textContent:options.empty}:null,querySelectorAll:s=>s==='a[href]'?anchors:options.captcha?[visible]:[]};
+  return JSON.parse(vm.runInNewContext(asset('google-results.js').replace('__VP_SOURCE__',JSON.stringify(source)),{document,location:url,URL,Map,getComputedStyle:()=>({display:'block',visibility:'visible'})}));
+}
+test('Google fallback unwraps redirects and accepts only movie links from the selected exact host',()=>{
+  const result=googleFixture([
+    {href:'https://freedisc.pl/embed/video/8307530?match=1',heading:'Ronin 1998'},
+    {href:'/url?q='+encodeURIComponent('https://www.freedisc.pl/u,f-8307530,ronin-1998-mp4'),heading:'Duplicate'},
+    {href:'https://freedisc.pl.evil.test/u,f-11,film-mp4',heading:'Wrong'},
+    {href:'https://freedisc.pl@evil.test/u,f-12,film-mp4',heading:'Wrong'},
+    {href:'https://freedisc.pl/u,d-13,folder',heading:'Folder'},
+    {href:'https://vider.info/vid/+fother',heading:'Wrong provider'},
+    {href:'/url?url='+encodeURIComponent('https://freedisc.pl/u,f-14,film-mp4?token=secret'),heading:'Another movie',image:'https://evil.test/poster.png'},
+    {href:'https://freedisc.pl/u,f-15,music-mp3',heading:'Music'}
+  ]);
+  assert.equal(result.stage,'complete');assert.equal(result.rows.length,2);assert.equal(result.rows[0].url,'https://freedisc.pl/embed/video/8307530?match=1');assert.equal(result.rows[1].url,'https://freedisc.pl/u,f-14,film-mp4');assert.equal(result.rows[1].thumbnail,'');
+});
+test('Google Vider fallback canonicalizes known domains and deduplicates movie IDs',()=>{
+  const result=googleFixture([{href:'https://vider.pl/user/ronin+ftest',heading:'Ronin'},{href:'https://vider.info/vid/+ftest',heading:'Duplicate'},{href:'https://vider.info/embed/video/next',heading:'Next'},{href:'https://vider.pl/dir/folder+ffake',heading:'Folder'},{href:'https://freedisc.pl/u,f-1,film-mp4',heading:'Other source'}],'VIDER');
+  assert.equal(result.rows.length,2);assert.equal(result.rows[0].url,'https://vider.pl/vid/+ftest');assert.equal(result.rows[1].url,'https://vider.info/vid/+fnext');
+});
+test('Google challenges wait for manual access and only explicit empty results are completed',()=>{
+  assert.equal(googleFixture([], 'FREEDISC',{url:'https://www.google.com/sorry/index'}).stage,'access');
+  assert.equal(googleFixture([], 'FREEDISC',{url:'https://consent.google.com/m'}).stage,'access');
+  assert.equal(googleFixture([], 'FREEDISC',{captcha:true}).stage,'access');
+  assert.equal(googleFixture([]).stage,'pending');assert.equal(googleFixture([], 'FREEDISC',{empty:'Nie znaleziono wyników'}).stage,'complete');
+});

@@ -17,7 +17,7 @@ public final class MovieLibrary {
         public Item(String url,String title,String thumbnail,long opened,long position,long duration,boolean completed){
             if(!UrlPolicy.isMovie(url))throw new IllegalArgumentException("Movie URL required");
             URI uri=URI.create(url);
-            this.url="https://"+uri.getHost().toLowerCase(Locale.ROOT)+uri.getRawPath();
+            this.url=UrlPolicy.movieUrl(url);
             this.title=title==null?"":title.trim().substring(0,Math.min(title.trim().length(),180));
             this.thumbnail=UrlPolicy.thumbnail(thumbnail)?thumbnail:"";
             this.opened=opened;
@@ -31,7 +31,7 @@ public final class MovieLibrary {
     public static String key(String url){
         if(!UrlPolicy.isMovie(url))return "";
         String path=URI.create(url).getPath();
-        Matcher m=Pattern.compile(SiteSource.fromUrl(url)==SiteSource.FREEDISC?",f-([0-9]+)":"\\+(f[A-Za-z0-9]+)").matcher(path);
+        Matcher m=Pattern.compile(SiteSource.fromUrl(url)==SiteSource.FREEDISC?"(?:,f-|/embed/video/)([0-9]+)":"\\+(f[A-Za-z0-9]+)").matcher(path);
         return m.find()?(SiteSource.fromUrl(url)==SiteSource.FREEDISC?"freedisc:":"vider:")+m.group(1):"";
     }
     private static boolean descriptive(String title){return title!=null&&!title.isEmpty()&&!title.startsWith("https://")&&!title.equalsIgnoreCase("Vider.info")&&!title.equalsIgnoreCase("Vider.pl")&&!title.equalsIgnoreCase("Freedisc")&&!title.startsWith("Film · ");}

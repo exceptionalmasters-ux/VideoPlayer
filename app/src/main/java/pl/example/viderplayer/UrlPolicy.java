@@ -21,11 +21,19 @@ public final class UrlPolicy {
         try {
             String path = URI.create(value).getPath();
             if (SiteSource.fromUrl(value) == SiteSource.FREEDISC) {
-                return path.matches("/[^/,]+,f-[0-9]+(?:,[^/]+)?/?");
+                return path.matches("/[^/,]+,f-[0-9]+(?:,[^/]+)?/?")||path.matches("/embed/video/[0-9]+/?");
             }
             return path.matches("/vid/[^/]*\\+f[A-Za-z0-9]+/?");
         }
         catch (RuntimeException e) { return false; }
+    }
+    public static String movieUrl(String value){
+        if(!isMovie(value))return "";
+        URI u=URI.create(value);String result="https://"+u.getHost().toLowerCase(Locale.ROOT)+u.getRawPath();
+        if(SiteSource.fromUrl(value)==SiteSource.FREEDISC&&u.getPath().matches("/embed/video/[0-9]+/?")&&u.getRawQuery()!=null){
+            for(String pair:u.getRawQuery().split("&"))if(pair.equals("match=1")){result+="?match=1";break;}
+        }
+        return result;
     }
     public static boolean playback(String value,String selectedMovie) {
         if(isMovie(value))return true;

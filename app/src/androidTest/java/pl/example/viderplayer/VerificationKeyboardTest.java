@@ -162,7 +162,7 @@ public final class VerificationKeyboardTest {
         }
     }
 
-    @Test public void missingPageCallbackEndsSearchAndPreviewKeepsManualVerification() throws Exception {
+    @Test public void missingPageCallbackStartsGoogleAndSourceChangeCancelsFallback() throws Exception {
         try (ActivityScenario<SearchActivity> scenario = ActivityScenario.launch(SearchActivity.class)) {
             java.util.concurrent.CountDownLatch loaded = new java.util.concurrent.CountDownLatch(1);
             AtomicReference<Runnable> oldTimeout = new AtomicReference<>();
@@ -197,26 +197,13 @@ public final class VerificationKeyboardTest {
                 oldTimeout.set(timeout);
                 // Fire the actual scheduled callback without waiting 30 seconds in CI.
                 timeout.run();
-                assertEquals(false, field(activity,"searchRunning"));
+                assertEquals(true,field(activity,"searchRunning"));
+                assertNotNull(field(activity,"google"));
                 assertNull(field(activity,"searchTimeout"));
-                assertTrue(((android.widget.TextView)field(activity,"status")).getText().toString().contains("30 sekund"));
-                Button preview = (Button)field(activity,"previewButton");
-                assertEquals(View.VISIBLE, preview.getVisibility());
-                String report = ((DiagnosticLog)field(activity,"diagnostics")).export();
-                assertTrue(report.contains("search.timeout"));
-                assertFalse(report.contains("Ronin"));
-                preview.performClick();
-                assertNotNull(field(activity,"verificationPanel"));
-            });
-            awaitKeyboard(scenario,true);
-            scenario.onActivity(activity -> {
-                assertNotNull(field(activity,"verificationCode"));
-                assertNull("The deadline must pause while the user solves a challenge", field(activity,"searchTimeout"));
+                String report=((DiagnosticLog)field(activity,"diagnostics")).export();assertTrue(report.contains("search.timeout"));assertTrue(report.contains("search.google.start"));assertFalse(report.contains("Ronin"));
                 selectSource(activity,SiteSource.VIDER);
-                String status = ((android.widget.TextView)field(activity,"status")).getText().toString();
-                oldTimeout.get().run();
-                assertEquals(status,((android.widget.TextView)field(activity,"status")).getText().toString());
-                assertNull(field(activity,"verificationPanel"));
+                String status=((android.widget.TextView)field(activity,"status")).getText().toString();oldTimeout.get().run();
+                assertEquals(status,((android.widget.TextView)field(activity,"status")).getText().toString());assertNull(field(activity,"google"));assertNull(field(activity,"verificationPanel"));
             });
         }
     }
@@ -270,3 +257,4 @@ public final class VerificationKeyboardTest {
         }
     }
 }
+
