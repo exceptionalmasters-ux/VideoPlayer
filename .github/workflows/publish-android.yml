@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-android-0.9.0
+  group: publish-android-0.9.1
   cancel-in-progress: false
 jobs:
   publish:
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-debug
-          run-id: 42220908901
+          run-id: 42270284748
           github-token: ${{ github.token }}
           path: verified
       - name: Publish the verified universal APK
@@ -30,11 +30,11 @@ jobs:
           set -euo pipefail
           mapfile -t apks < <(find verified -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" VideoPlayer-0.9.0.apk
-          echo '4285b2e48a29eb90ec55a086709c7882fe5f11fd925d04b4dce7fc39b4c6ebd8  VideoPlayer-0.9.0.apk' | sha256sum -c -
-          if gh release view android-v0.9.0 >/dev/null 2>&1; then
-            gh release download android-v0.9.0 --pattern VideoPlayer-0.9.0.apk --output existing.apk
-            echo '4285b2e48a29eb90ec55a086709c7882fe5f11fd925d04b4dce7fc39b4c6ebd8  existing.apk' | sha256sum -c -
+          cp "${apks[0]}" VideoPlayer-0.9.1.apk
+          echo 'b1624a121e2e6124856de45fa6c6f7a75efdcb7ef29aa7e683e60544cda735ac  VideoPlayer-0.9.1.apk' | sha256sum -c -
+          if gh release view android-v0.9.1 >/dev/null 2>&1; then
+            gh release download android-v0.9.1 --pattern VideoPlayer-0.9.1.apk --output existing.apk
+            echo 'b1624a121e2e6124856de45fa6c6f7a75efdcb7ef29aa7e683e60544cda735ac  existing.apk' | sha256sum -c -
           else
-            gh release create android-v0.9.0 VideoPlayer-0.9.0.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.9.0 — Android i Android TV' --notes 'Obsługa bezpośrednich linków Freedisc /embed/video/ z zachowaniem historii, pozycji i match=1. Jednorazowe wyszukiwanie Google przy błędzie lub limicie wyszukiwarki serwisu; również osobny przycisk Google i przygotowanie kolejnego odcinka. Wyniki są kafelkami wyłącznie z dokładnych domen wybranego źródła. Google CAPTCHA i zgody pozostają ręczne wewnątrz aplikacji. Wycofane ukrywanie reklam; zachowana diagnostyka z 0.8.3. SHA-256: 4285b2e48a29eb90ec55a086709c7882fe5f11fd925d04b4dce7fc39b4c6ebd8' --prerelease
+            gh release create android-v0.9.1 VideoPlayer-0.9.1.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.9.1 — Android i Android TV' --notes 'Bezpośrednie Play/Pauza do ramki odtwarzacza na Android TV, również przed pełnym ekranem; ręczne sterowanie wyłącza ponawianie autostartu. Pole CAPTCHA pod obrazkiem i układ uwzględniający klawiaturę TV. Nowe żądanie przy ponownym wyszukaniu tej samej frazy. Strzałki i przyciski Góra/Dół przewijają wewnętrzne okna cookies Google. SHA-256: b1624a121e2e6124856de45fa6c6f7a75efdcb7ef29aa7e683e60544cda735ac' --prerelease
           fi
