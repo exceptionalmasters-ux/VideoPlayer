@@ -92,6 +92,8 @@ public final class TvRemoteTest {
             key(KeyEvent.KEYCODE_DPAD_UP);
             await(scenario,activity->find(activity.getWindow().getDecorView(),"Raport").hasFocus(),"UP must reach the action row");
             key(KeyEvent.KEYCODE_DPAD_LEFT);
+            await(scenario,activity->find(activity.getWindow().getDecorView(),"Google").hasFocus(),"LEFT must reach the Google fallback button");
+            key(KeyEvent.KEYCODE_DPAD_LEFT);
             await(scenario,activity->find(activity.getWindow().getDecorView(),"Mam link").hasFocus(),"LEFT must reach paste link");
             key(KeyEvent.KEYCODE_DPAD_UP);
             await(scenario,activity->((View)field(activity,"query")).hasFocus(),"UP through native controls must reach title");

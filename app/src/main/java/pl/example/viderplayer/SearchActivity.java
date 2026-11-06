@@ -477,7 +477,7 @@ public final class SearchActivity extends Activity {
         if(fallbackUsed||requestedTitle==null)return;
         fallbackUsed=true;++scanToken;++requestGeneration;pauseSearchTimeout();engine.stopLoading();dismissVerification();
         final int generation=requestGeneration;final SiteSource source=selectedSource;
-        status.setText("Wyszukiwarka "+source.label+" niedostępna — szukam przez Google…");previewButton.setVisibility(View.GONE);
+        status.setText(forceGoogle?"Szukam przez Google · "+source.label+"…":"Wyszukiwarka "+source.label+" niedostępna — szukam przez Google…");previewButton.setVisibility(View.GONE);
         google=new GoogleFallback(this,screen,source,diagnostics,new GoogleFallback.Listener(){
             private boolean valid(){return active&&searchRunning&&generation==requestGeneration&&source==selectedSource;}
             @Override public void results(JSONArray rows){if(!valid())return;results=rows;searchResults=rows;collection="results";render();status.setText("Wyniki Google · "+source.label+" · "+rows.length());}
@@ -533,6 +533,7 @@ public final class SearchActivity extends Activity {
                 if (attempt < 120) handler.postDelayed(() -> inspect(token, attempt + 1), 1500);
                 return;
             }
+            if(lastHttpError>=400){failSearch("Wyszukiwarka serwisu odpowiedziała błędem HTTP "+lastHttpError);return;}
             armSearchTimeout();
             if (UrlPolicy.isHome(engine.getUrl()) && requestedSearch != null) {
                 if (selectedSource == SiteSource.FREEDISC) { routeFreedisc(token, attempt); return; }
