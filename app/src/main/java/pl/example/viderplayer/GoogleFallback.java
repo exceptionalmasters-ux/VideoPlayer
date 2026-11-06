@@ -31,7 +31,7 @@ final class GoogleFallback {
     GoogleFallback(Activity activity,FrameLayout root,SiteSource source,DiagnosticLog log,Listener listener){
         this.activity=activity;this.root=root;this.source=source;this.log=log;this.listener=listener;
         host=new FrameLayout(activity);root.addView(host,0,new FrameLayout.LayoutParams(-1,-1));
-        engine=TvUi.enabled(activity)?new TvWebView(activity):new WebView(activity);host.addView(engine,new FrameLayout.LayoutParams(-1,-1));engine.setVisibility(View.INVISIBLE);
+        engine=TvUi.enabled(activity)?new TvWebView(activity):new WebView(activity);engine.setId(View.generateViewId());host.addView(engine,new FrameLayout.LayoutParams(-1,-1));engine.setVisibility(View.INVISIBLE);
         WebSettings s=engine.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setMediaPlaybackRequiresUserGesture(true);s.setSupportMultipleWindows(true);s.setJavaScriptCanOpenWindowsAutomatically(false);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(engine,true);
         engine.setWebChromeClient(new WebChromeClient(){@Override public boolean onCreateWindow(WebView v,boolean d,boolean g,Message m){return false;}});
@@ -102,14 +102,22 @@ final class GoogleFallback {
         TextView help=new TextView(activity);help.setText("Dokończ zgodę lub weryfikację na oryginalnej stronie Google. Potem wrócimy do kafelków wyłącznie z "+source.label+".");help.setTextColor(Color.LTGRAY);panel.addView(help);
         ((android.view.ViewGroup)engine.getParent()).removeView(engine);panel.addView(engine,new LinearLayout.LayoutParams(-1,0,1));engine.setVisibility(View.VISIBLE);engine.setFocusableInTouchMode(true);
         LinearLayout actions=new LinearLayout(activity);button(actions,"Sprawdź",()->schedule(50));button(actions,"Klawiatura",()->{engine.requestFocus();((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(engine,InputMethodManager.SHOW_IMPLICIT);});
+        if(TvUi.enabled(activity))button(actions,"Strona",engine::requestFocus);
         if(TvUi.enabled(activity))button(actions,"Kursor",()->{if(pointer!=null)pointer.toggle();});
-        button(actions,"Wróć",()->hideAccess(true));panel.addView(actions);root.addView(panel,new FrameLayout.LayoutParams(-1,-1));panel.bringToFront();if(TvUi.enabled(activity))pointer=new TvPointer(root,engine,engine::requestFocus);engine.requestFocus();
+        button(actions,"Wróć",()->hideAccess(true));panel.addView(actions);root.addView(panel,new FrameLayout.LayoutParams(-1,-1));panel.bringToFront();
+        if(TvUi.enabled(activity)){
+            pointer=new TvPointer(root,engine,engine::requestFocus);java.util.List<View> buttons=new java.util.ArrayList<>();for(int i=0;i<actions.getChildCount();i++)buttons.add(actions.getChildAt(i));TvFocus.connect(java.util.Arrays.asList(buttons));actions.getChildAt(0).post(()->{if(panel!=null)actions.getChildAt(0).requestFocus();});
+        }else engine.requestFocus();
     }
     private void button(LinearLayout row,String title,Runnable action){Button b=new Button(activity);b.setText(title);b.setTextSize(14);b.setTextColor(Color.WHITE);TvUi.focusable(b);b.setOnClickListener(v->action.run());row.addView(b);}
     private int dp(int value){return TvUi.dp(activity,value);}
     private void hideAccess(boolean notify){if(panel==null)return;if(pointer!=null){pointer.dispose();pointer=null;}((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(engine.getWindowToken(),0);panel.removeView(engine);host.addView(engine,new FrameLayout.LayoutParams(-1,-1));engine.setVisibility(View.INVISIBLE);root.removeView(panel);panel=null;if(notify)listener.closed();}
     boolean accessOpen(){return panel!=null;}
-    boolean key(KeyEvent e){return pointer!=null&&pointer.key(e);}
+    boolean key(KeyEvent e){
+        if(pointer!=null&&pointer.key(e))return true;
+        if(panel!=null&&TvUi.enabled(activity)&&e.getKeyCode()==KeyEvent.KEYCODE_MENU){if(e.getAction()==KeyEvent.ACTION_UP&&pointer!=null)pointer.toggle();return true;}
+        return false;
+    }
     boolean back(){if(pointer!=null&&pointer.active()){pointer.stop();return true;}if(panel!=null){hideAccess(true);return true;}return false;}
     void pause(){paused=true;if(pointer!=null)pointer.stop();handler.removeCallbacksAndMessages(null);engine.onPause();}
     void resume(){if(disposed)return;paused=false;if(running){engine.onResume();if(!inAccess)deadline=SystemClock.elapsedRealtime()+30000;schedule(100);}}
