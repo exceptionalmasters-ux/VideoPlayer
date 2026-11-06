@@ -20,7 +20,15 @@
     if(e.source===window.parent&&e.data&&e.data.type==='vp-progress-flush'&&/^https:\/\/(www\.)?(vider\.(pl|info)|freedisc\.pl)$/.test(e.origin))flush();
   });
   bridge.onmessage=function(e){
-    try{const value=JSON.parse(e.data);if(typeof value.token!=='string'||!Number.isFinite(value.position))return;
+    try{const value=JSON.parse(e.data);
+      if(value.type==='media-command'){
+        if(!token||value.token!==token||typeof value.requestId!=='string'||value.requestId.length>80)return;
+        if(value.manual===true&&window.__vpCancelAutoStart)window.__vpCancelAutoStart();
+        if(window.__vpTvTouchParent)window.__vpTvTouchParent(value.parentOrigin);
+        const handled=!!(window.__vpTvCommand&&window.__vpTvCommand(value.action,value.requestId));
+        send('media-command-result',{requestId:value.requestId,handled});return;
+      }
+      if(typeof value.token!=='string'||!Number.isFinite(value.position))return;
       token=value.token;saved=value;restoring=value.position>0;attempts=0;restoreAt=0;
       if(value.autostart===true&&window.__vpStartOriginalPlayer)window.__vpStartOriginalPlayer(player,send);
     }catch(_){}

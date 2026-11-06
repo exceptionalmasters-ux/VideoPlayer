@@ -102,9 +102,9 @@ final class GoogleFallback {
         TextView help=new TextView(activity);help.setText("Dokończ zgodę lub weryfikację na oryginalnej stronie Google. Potem wrócimy do kafelków wyłącznie z "+source.label+".");help.setTextColor(Color.LTGRAY);panel.addView(help);
         ((android.view.ViewGroup)engine.getParent()).removeView(engine);panel.addView(engine,new LinearLayout.LayoutParams(-1,0,1));engine.setVisibility(View.VISIBLE);engine.setFocusableInTouchMode(true);
         LinearLayout actions=new LinearLayout(activity);button(actions,"Sprawdź",()->schedule(50));button(actions,"Klawiatura",()->{engine.requestFocus();((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(engine,InputMethodManager.SHOW_IMPLICIT);});
-        if(TvUi.enabled(activity))button(actions,"Strona",engine::requestFocus);
+        if(TvUi.enabled(activity)){button(actions,"Góra",()->scroll(-1));button(actions,"Dół",()->scroll(1));button(actions,"Strona",engine::requestFocus);}
         if(TvUi.enabled(activity))button(actions,"Kursor",()->{if(pointer!=null)pointer.toggle();});
-        button(actions,"Wróć",()->hideAccess(true));panel.addView(actions);root.addView(panel,new FrameLayout.LayoutParams(-1,-1));panel.bringToFront();
+        button(actions,"Wróć",()->hideAccess(true));HorizontalScrollView bar=new HorizontalScrollView(activity);bar.addView(actions);panel.addView(bar);root.addView(panel,new FrameLayout.LayoutParams(-1,-1));panel.bringToFront();
         if(TvUi.enabled(activity)){
             pointer=new TvPointer(root,engine,engine::requestFocus);java.util.List<View> buttons=new java.util.ArrayList<>();for(int i=0;i<actions.getChildCount();i++)buttons.add(actions.getChildAt(i));TvFocus.connect(java.util.Arrays.asList(buttons));actions.getChildAt(0).post(()->{if(panel!=null)actions.getChildAt(0).requestFocus();});
         }else engine.requestFocus();
@@ -112,9 +112,17 @@ final class GoogleFallback {
     private void button(LinearLayout row,String title,Runnable action){Button b=new Button(activity);b.setText(title);b.setTextSize(14);b.setTextColor(Color.WHITE);TvUi.focusable(b);b.setOnClickListener(v->action.run());row.addView(b);}
     private int dp(int value){return TvUi.dp(activity,value);}
     private void hideAccess(boolean notify){if(panel==null)return;if(pointer!=null){pointer.dispose();pointer=null;}((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(engine.getWindowToken(),0);panel.removeView(engine);host.addView(engine,new FrameLayout.LayoutParams(-1,-1));engine.setVisibility(View.INVISIBLE);root.removeView(panel);panel=null;if(notify)listener.closed();}
+    void scroll(int direction){
+        if(disposed||panel==null)return;
+        try(java.io.InputStream in=activity.getAssets().open("google-scroll.js");java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
+            byte[] b=new byte[4096];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+            engine.evaluateJavascript(new String(out.toByteArray(),StandardCharsets.UTF_8).replace("__VP_DIRECTION__",direction>0?"1":"-1"),null);
+        }catch(Exception ignored){}
+    }
     boolean accessOpen(){return panel!=null;}
     boolean key(KeyEvent e){
         if(pointer!=null&&pointer.key(e))return true;
+        if(panel!=null&&TvUi.enabled(activity)&&engine.hasFocus()&&(e.getKeyCode()==KeyEvent.KEYCODE_DPAD_UP||e.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN)){if(e.getAction()==KeyEvent.ACTION_DOWN)scroll(e.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN?1:-1);return true;}
         if(panel!=null&&TvUi.enabled(activity)&&e.getKeyCode()==KeyEvent.KEYCODE_MENU){if(e.getAction()==KeyEvent.ACTION_UP&&pointer!=null)pointer.toggle();return true;}
         return false;
     }

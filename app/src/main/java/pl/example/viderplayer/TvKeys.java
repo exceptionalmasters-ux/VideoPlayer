@@ -8,7 +8,8 @@ final class TvKeys {
             case 89:return "back";case 90:return "forward";default:return null;}
     }
     static String fullscreen(int key) {
-        switch(key){case 21:return "back";case 22:return "forward";case 23:case 66:return "toggle";
+        switch(key){case 21:return "back";case 22:return "forward";case 23:case 66:case 160:case 62:case 96:return "toggle";
             case 19:case 20:return "controls";default:return null;}
     }
 }
+

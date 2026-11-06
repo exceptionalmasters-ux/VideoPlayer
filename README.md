@@ -229,3 +229,11 @@ Adres Freedisc `/embed/video/8307530?match=1` jest pełnoprawnym filmem, także 
 Błąd, nierozpoznana odpowiedź lub limit czasu wyszukiwarki serwisu uruchamia jedno zapytanie Google o tytuł z nazwą serwisu i ograniczeniem `site:`. Wyniki są filtrowane ponownie w aplikacji do dokładnych domen wybranego źródła i adresów filmów, a następnie pokazywane jako zwykłe kafelki. Przycisk Google pozwala zacząć od tej drogi. Jawne potwierdzenie braku wyników w wyszukiwarce serwisu nie oznacza awarii. Ta sama alternatywa działa przy przygotowaniu kolejnego odcinka, w oddzielnym WebView.
 
 Google może wymagać zgody lub CAPTCHA. Oryginalny formularz jest wtedy dostępny wewnątrz aplikacji, wyszukiwanie zachowuje zapytanie i czeka na ręczną czynność użytkownika. Nie ma automatycznego rozwiązywania CAPTCHA ani otwierania przeglądarki zewnętrznej. Błąd Google kończy wyszukiwanie bez zapętlonych ponowień. Testy lokalne sprawdzają parser, filtry domen, zachowanie formularza i otwieranie embed; nie gwarantują dostępności Google na danym urządzeniu.
+
+### Pilot, CAPTCHA i ponowienia (0.9.1)
+
+Play/Pauza trafia do uwierzytelnionej ramki oryginalnego odtwarzacza, z osobnym potwierdzeniem wyniku. Ręczne polecenie wyłącza ponowienia autostartu. OK, Enter, Enter numeryczny i przycisk A działają także w widoku odtwarzacza przed pełnym ekranem.
+
+Pole CAPTCHA w widoku filmu i przy kolejnym odcinku jest pod obrazkiem. Zbędne przyciski widoku filmu są chowane na czas kodu; układ TV uwzględnia klawiaturę zarówno przy zmianie rozmiaru okna, jak i jej nakładaniu. Obrazek przewija się na początek widocznego obszaru.
+
+Identyczna fraza może być ponownie wyszukana od razu po zakończeniu poprzedniego wyszukiwania. Nowe dokumenty otrzymują identyfikator żądania, żeby opóźnione callbacki nie odczytały starej strony. Okno Google ma na TV przyciski Góra/Dół oraz przewijanie wewnętrznych paneli zgody.

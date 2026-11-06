@@ -81,12 +81,16 @@ public final class MainActivity extends Activity {
         else if(codeRow.getChildCount()>1)codeInput.setNextFocusDownId(codeRow.getChildAt(codeRow.getChildCount()-1).getId());
     }
     private final java.util.Map<View,Integer> playerChrome=new java.util.IdentityHashMap<>();
+    private final java.util.Map<View,Integer> codeChrome=new java.util.IdentityHashMap<>();
     private final PresentationPolicy presentation=new PresentationPolicy();
     private int presentationScan;
     private LocalLibrary library;
     private String launchMovieKey="",launchMovieTitle="",launchMovieThumbnail="";
     private final java.util.Map<String,String> playbackFrames=new java.util.HashMap<>();
     private String pendingTvTap="";
+    private String mediaCommandId="",mediaCommandAction="";
+    private final java.util.Map<String,androidx.webkit.JavaScriptReplyProxy> mediaReplies=new java.util.LinkedHashMap<>();
+    private final java.util.Map<String,String> mediaPages=new java.util.HashMap<>();
     private long pendingTvTapUntil;
     private int pendingTvTapGeneration;
     private EpisodeSuggestions episodes;
@@ -113,10 +117,10 @@ public final class MainActivity extends Activity {
         setContentView(root);
         // Respect status and gesture bars, including Android 15 edge-to-edge.
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
-                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+            TvUi.applyInsets(v,insets);
             return insets;
         });
+        root.addOnLayoutChangeListener((v,l,t,rr,b,ol,ot,or,ob)->{if(v.getRootWindowInsets()!=null)TvUi.applyInsets(v,v.getRootWindowInsets());});
         root.requestApplyInsets();
         TextView title = new TextView(this);
         title.setText(television?"VideoPlayer TV · pilot: OK / strzałki / Wstecz":"VideoPlayer  /  prototyp");
@@ -190,9 +194,9 @@ public final class MainActivity extends Activity {
         codeRow.addView(codeInput, new LinearLayout.LayoutParams(0, dp(56), 1));
         if(!television)button(codeRow,"Wstaw kod",this::insertVerificationCode);
         if(television)button(codeRow,"Zatwierdź",()->insertVerificationCode(true));
-        content.addView(codeRow);
         web = new TvWebView(this);
         content.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
+        content.addView(codeRow);
         fullscreenControls=new Button(this);
         fullscreenControls.setText("☰");
         fullscreenControls.setTextSize(20);
@@ -292,7 +296,7 @@ public final class MainActivity extends Activity {
                 ++presentationScan;
                 web.getSettings().setUseWideViewPort(true);
                 web.getSettings().setLoadWithOverviewMode(true);
-                ++pageGeneration;playbackFrames.clear();pendingTvTap="";autoStartPending=!getIntent().getBooleanExtra("manualStart",false);
+                ++pageGeneration;playbackFrames.clear();mediaReplies.clear();mediaPages.clear();mediaCommandId="";pendingTvTap="";autoStartPending=!getIntent().getBooleanExtra("manualStart",false);
                 setCodeVisible(false);
                 diagnostics.add("page.start", url, 0);
                 address.setText(url);
@@ -462,15 +466,22 @@ public final class MainActivity extends Activity {
                     if(SiteSource.fromUrl(movie)==SiteSource.VIDER&&frame.contains("/embed/video/")&&!android.net.Uri.parse(frame).getPath().replaceAll("/$", "").endsWith("/"+MovieLibrary.key(movie).substring("vider:f".length())))return;
                     if("hello".equals(data.optString("event"))){
                         if(playbackFrames.size()>32)return;
-                        String token=java.util.UUID.randomUUID().toString();playbackFrames.put(token,MovieLibrary.key(movie));
+                        String token=java.util.UUID.randomUUID().toString();playbackFrames.put(token,MovieLibrary.key(movie));mediaReplies.put(token,reply);mediaPages.put(token,frame);
                         MovieLibrary.Item saved=library.find(movie);
                         JSONObject response=new JSONObject().put("token",token).put("position",saved==null?0:saved.position).put("duration",saved==null?0:saved.duration).put("autostart",autoStartPending);
                         reply.postMessage(response.toString());
                     }else if(MovieLibrary.key(movie).equals(playbackFrames.get(data.optString("token")))){
                         String event=data.optString("event");
+                        if(event.equals("media-command-result")){
+                            if(mediaCommandId.equals(data.optString("requestId"))){
+                                diagnostics.add("tv.command.ack",frame,data.optBoolean("handled")?1:0);
+                                if(!data.optBoolean("handled"))rootMediaCommand(mediaCommandAction,mediaCommandId);
+                            }
+                            return;
+                        }
                         if(event.startsWith("autoplay-")){
                             if("autoplay-started".equals(event)||"autoplay-cancelled".equals(event)||"autoplay-expired".equals(event)){autoStartPending=false;diagnostics.add(event.replace("autoplay-","autoplay."),frame,0);}
-                            else if("autoplay-request".equals(event)&&autoStartPending&&!accessRequired&&(playerFullscreen||customView!=null))tvCommand("play");
+                            else if("autoplay-request".equals(event)&&autoStartPending&&!accessRequired&&(playerFullscreen||customView!=null))tvCommand("play",true);
                             return;
                         }
                         long position=data.optLong("position",-1),duration=data.optLong("duration",-1);boolean ended=data.optBoolean("ended");
@@ -544,6 +555,10 @@ public final class MainActivity extends Activity {
         if(television)((TvWebView)web).codePage(visible,this::submitPageCode);
         if (visible == (codeRow.getVisibility() == View.VISIBLE)) return;
         codeRow.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if(visible){
+            for(int i=0;i<content.getChildCount();i++){View child=content.getChildAt(i);if(child!=web&&child!=codeRow){codeChrome.put(child,child.getVisibility());child.setVisibility(View.GONE);}}
+        }else{for(java.util.Map.Entry<View,Integer> entry:codeChrome.entrySet())entry.getKey().setVisibility(entry.getValue());codeChrome.clear();}
+        root.requestApplyInsets();
         web.getSettings().setUseWideViewPort(!visible);
         web.getSettings().setLoadWithOverviewMode(!visible);
         wirePlayerNavigation();
@@ -588,14 +603,35 @@ public final class MainActivity extends Activity {
             }else toast("Nie znaleziono wpisanego kodu i przycisku Wchodzę na stronie.");
         });
     }
-    private void tvCommand(String action) {
+    private void tvCommand(String action){tvCommand(action,false);}
+    private void tvCommand(String action,boolean automatic){
         if(!allowed(web.getUrl())||episodes!=null&&episodes.modal())return;
-        if(codeRow.getVisibility()==View.VISIBLE){toast("Najpierw dokończ weryfikację kodu.");return;}
+        if(codeRow.getVisibility()==View.VISIBLE||accessRequired){if(!automatic)toast("Najpierw dokończ weryfikację kodu.");return;}
+        if(!automatic)autoStartPending=false;
         diagnostics.add("tv.command."+action,null,0);
-        pendingTvTap=("toggle".equals(action)||"play".equals(action))?java.util.UUID.randomUUID().toString():"";
-        pendingTvTapUntil=android.os.SystemClock.uptimeMillis()+2000;pendingTvTapGeneration=pageGeneration;
-        String command="(function(){return !!(window.__vpTvCommand && window.__vpTvCommand("+JSONObject.quote(action)+","+JSONObject.quote(pendingTvTap)+"));}())";
-        web.evaluateJavascript(command,value->{if(!"true".equals(value))toast("Nie znaleziono gotowego odtwarzacza. Wybierz Strona i uruchom film.");});
+        String id=java.util.UUID.randomUUID().toString();mediaCommandId=id;mediaCommandAction=action;
+        pendingTvTap=("toggle".equals(action)||"play".equals(action)||"pause".equals(action))?id:"";
+        pendingTvTapUntil=android.os.SystemClock.uptimeMillis()+3000;pendingTvTapGeneration=pageGeneration;
+        String target=null;int best=-1;
+        String movie=UrlPolicy.isMovie(web.getUrl())?web.getUrl():movieNavigation.target();
+        for(String token:mediaReplies.keySet()){
+            if(!MovieLibrary.key(movie).equals(playbackFrames.get(token)))continue;
+            String page=mediaPages.get(token);int score=page!=null&&android.net.Uri.parse(page).getPath().startsWith("/embed")?2:1;
+            if(score>=best){best=score;target=token;}
+        }
+        if(target!=null){
+            try{
+                android.net.Uri page=android.net.Uri.parse(web.getUrl());
+                JSONObject data=new JSONObject().put("type","media-command").put("token",target).put("action",action).put("requestId",id).put("manual",!automatic).put("parentOrigin",page.getScheme()+"://"+page.getAuthority());
+                mediaReplies.get(target).postMessage(data.toString());diagnostics.add("tv.command.direct",mediaPages.get(target),0);return;
+            }catch(Exception ignored){mediaReplies.remove(target);mediaPages.remove(target);}
+        }
+        rootMediaCommand(action,id);
+    }
+    private void rootMediaCommand(String action,String id){
+        if(!alive||!resumed||!mediaCommandId.equals(id)||pendingTvTapGeneration!=pageGeneration||!allowed(web.getUrl()))return;
+        String command="(function(){return !!(window.__vpTvCommand && window.__vpTvCommand("+JSONObject.quote(action)+","+JSONObject.quote(id)+"));}())";
+        web.evaluateJavascript(command,value->{if(!"true".equals(value))diagnostics.add("tv.command.not_ready",web.getUrl(),0);});
     }
     private void enterTvFullscreen() {
         enterPlayerFullscreen(pageGeneration,false);
@@ -655,7 +691,7 @@ public final class MainActivity extends Activity {
             }
         } else if(web!=null&&web.hasFocus()){
             int key=event.getKeyCode();
-            if(movieFocused&&codeRow.getVisibility()!=View.VISIBLE){
+            if(codeRow.getVisibility()!=View.VISIBLE&&!accessRequired&&UrlPolicy.playback(web.getUrl(),movieNavigation.target())){
                 command=TvKeys.fullscreen(key);
                 if(command!=null){if(event.getAction()==KeyEvent.ACTION_UP){if(command.equals("controls")){if(tvControlsAnchor!=null)tvControlsAnchor.requestFocus();}else tvCommand(command);}return true;}
             }

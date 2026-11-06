@@ -8,10 +8,12 @@
     if (!actions.includes(action)) return false;
     // Prefer the original player's API so its advertisement rules remain in effect.
     try {
-      const player=typeof window.jwplayer==='function'?window.jwplayer():null;
+      const selected=document.querySelector?document.querySelector('[data-vp-player].jwplayer,[data-vp-embed-player].jwplayer,.jwplayer'):null;
+      const player=typeof window.jwplayer==='function'?window.jwplayer(selected&&selected.id||undefined):null;
       if (player && typeof player.getState==='function' && player.getState()) {
-        const video=document.querySelector?document.querySelector('.jwplayer video.jw-video'):null;
-        const playing=video&&video.currentSrc? !video.paused : String(player.getState()).toLowerCase()==='playing';
+        let container=null;try{container=typeof player.getContainer==='function'?player.getContainer():null;}catch(_){}
+        const video=container&&container.querySelector?container.querySelector('video'):document.querySelector?document.querySelector('.jwplayer video.jw-video,.jwplayer video'):null;
+        const playing=video&&(video.currentSrc||video.readyState>0)? !video.paused&&!video.ended : String(player.getState()).toLowerCase()==='playing';
         if(((action==='play'||action==='toggle')&&!playing)&&window.__vpTvTapPlay&&window.__vpTvTapPlay(requestId))return true;
         if(action==='toggle') { if(playing)player.pause(true);else player.play(true); }
         else if(action==='play')player.play(true);

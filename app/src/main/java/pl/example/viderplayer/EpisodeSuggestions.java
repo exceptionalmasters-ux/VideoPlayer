@@ -137,9 +137,9 @@ final class EpisodeSuggestions {
         LinearLayout codeRow=new LinearLayout(activity);
         code=tv?new TvEditText(activity):new EditText(activity);code.setTextColor(Color.WHITE);code.setHintTextColor(Color.LTGRAY);code.setHint("Kod z obrazka");code.setSingleLine(true);code.setTextSize(tv?18:16);code.setImeOptions(EditorInfo.IME_ACTION_DONE);code.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);code.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
         code.setText(enteredCode);TvUi.editor(code,this::submit);code.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE||action==EditorInfo.IME_ACTION_GO||action==EditorInfo.IME_ACTION_SEARCH){submit();return true;}return false;});
-        codeRow.addView(code,new LinearLayout.LayoutParams(0,dp(52),1));Button submit=button(codeRow,"Zatwierdź",this::submit);accessPanel.addView(codeRow);
+        codeRow.addView(code,new LinearLayout.LayoutParams(0,dp(52),1));Button submit=button(codeRow,"Zatwierdź",this::submit);
         if(worker.engine.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)worker.engine.getParent()).removeView(worker.engine);
-        accessPanel.addView(worker.engine,new LinearLayout.LayoutParams(-1,0,1));worker.engine.setVisibility(View.VISIBLE);
+        accessPanel.addView(worker.engine,new LinearLayout.LayoutParams(-1,0,1));accessPanel.addView(codeRow);worker.engine.setVisibility(View.VISIBLE);
         LinearLayout actions=new LinearLayout(activity);accessPanel.addView(actions);
         Button check=button(actions,"Sprawdź",worker::check),keyboard=button(actions,"Klawiatura",()->{
             if(codeRow.getVisibility()==View.VISIBLE){code.requestFocus();((InputMethodManager)activity.getSystemService(Activity.INPUT_METHOD_SERVICE)).showSoftInput(code,InputMethodManager.SHOW_IMPLICIT);}else worker.engine.requestFocus();

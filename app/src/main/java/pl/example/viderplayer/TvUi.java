@@ -20,6 +20,18 @@ final class TvUi {
         return mode!=null && mode.getCurrentModeType()==Configuration.UI_MODE_TYPE_TELEVISION
             || context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
     }
+    static void applyInsets(View view,android.view.WindowInsets insets){
+        int left=insets.getSystemWindowInsetLeft(),top=insets.getSystemWindowInsetTop(),right=insets.getSystemWindowInsetRight(),bottom=insets.getSystemWindowInsetBottom();
+        if(enabled(view.getContext())&&android.os.Build.VERSION.SDK_INT>=30){
+            android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());left=bars.left;top=bars.top;right=bars.right;bottom=bars.bottom;
+            int ime=insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+            if(insets.isVisible(android.view.WindowInsets.Type.ime())&&ime>0&&view.getDisplay()!=null){
+                android.graphics.Point size=new android.graphics.Point();view.getDisplay().getRealSize(size);int[] position=new int[2];view.getLocationOnScreen(position);
+                bottom=Math.max(bottom,Math.max(0,position[1]+view.getHeight()-(size.y-ime)));
+            }
+        }
+        view.setPadding(left,top,right,bottom);
+    }
     static int dp(Context context,int value){return Math.round(value*context.getResources().getDisplayMetrics().density);}
     private static GradientDrawable shape(Context context,boolean focused) {
         GradientDrawable shape=new GradientDrawable();

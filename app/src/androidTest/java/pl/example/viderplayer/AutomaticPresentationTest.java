@@ -171,24 +171,29 @@ public final class AutomaticPresentationTest {
             +"window.player={getState:function(){return playState},getPosition:function(){return position},on:function(n,f){events[n]=f},play:function(){apiPlayCalls++},pause:function(){playState='paused';button.setAttribute('aria-label','Play');if(events.pause)events.pause()},seek:function(p){position=p;events.time({position:p,duration:7200})}};window.jwplayer=function(){return player};"
             +"button.addEventListener('click',function(e){if(!e.isTrusted)return;trustedClicks++;playState='playing';button.setAttribute('aria-label','Pause');if(events.time)events.time({position:position,duration:7200})});</script></body></html>";
         try(ActivityScenario<MainActivity> scenario=launch()){
-            loadAt(scenario,"<div class='video-frame'><iframe style='border:0' src='https://vider.info/embed/video/autotest'></iframe></div>",URL,child);
+            loadAt(scenario,"<div class='video-frame'><iframe style='border:0' src='https://vider.info/embed/video/autotest'></iframe></div><script>window.__vpTvCommand=function(){return false};</script>",URL,child);
             await(scenario,a->(Boolean)field(a,"playerFullscreen"),"TV player did not enter fullscreen");
             String frame="document.querySelector('iframe').contentWindow";
             long end=SystemClock.elapsedRealtime()+10000;
             while(!"true".equals(eval(scenario,"!!("+frame+".events&&"+frame+".events.time)"))){if(SystemClock.elapsedRealtime()>end)fail("Progress listener missing");SystemClock.sleep(100);}
+            await(scenario,a->web(a).getProgress()==100&&!((java.util.Map<?,?>)field(a,"mediaReplies")).isEmpty(),"Direct player channel missing");
+            scenario.onActivity(a->{try{java.lang.reflect.Method leave=MainActivity.class.getDeclaredMethod("exitPlayerFullscreen");leave.setAccessible(true);leave.invoke(a);web(a).requestFocus();}catch(Exception e){throw new AssertionError(e);}});
             // No native touch is authorized by a page's own message.
             eval(scenario,"window.vpTvTouch.postMessage(JSON.stringify({type:'vp-tv-play-tap',id:'unsolicited',x:0.5,y:0.5}));true");
             SystemClock.sleep(200);assertEquals("0",eval(scenario,frame+".trustedClicks"));
-            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_NUMPAD_ENTER);
             end=SystemClock.elapsedRealtime()+5000;
             while(!"true".equals(eval(scenario,frame+".trustedClicks===1&&"+frame+".position===600&&"+frame+".playState==='playing'"))){if(SystemClock.elapsedRealtime()>end)fail("OK did not activate original Play and resume saved position; "+eval(scenario,frame+".trustedClicks"));SystemClock.sleep(100);}
-            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
+            scenario.onActivity(a->{try{java.lang.reflect.Method enter=MainActivity.class.getDeclaredMethod("enterTvFullscreen");enter.setAccessible(true);enter.invoke(a);}catch(Exception e){throw new AssertionError(e);}});
+            await(scenario,a->(Boolean)field(a,"playerFullscreen"),"Manual fullscreen failed");
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BUTTON_A);
             end=SystemClock.elapsedRealtime()+5000;
             while(!"true".equals(eval(scenario,frame+".playState==='paused'"))){if(SystemClock.elapsedRealtime()>end)fail("Second OK did not pause");SystemClock.sleep(100);}
             InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);
             end=SystemClock.elapsedRealtime()+5000;
             while(!"true".equals(eval(scenario,frame+".trustedClicks===2&&"+frame+".position===600&&"+frame+".playState==='playing'"))){if(SystemClock.elapsedRealtime()>end)fail("OK did not resume paused content");SystemClock.sleep(100);}
             assertEquals("0",eval(scenario,frame+".apiPlayCalls"));
+            scenario.onActivity(a->assertTrue(((DiagnosticLog)field(a,"diagnostics")).export().contains("tv.command.direct")));
         }finally{library.remove("history",URL);}
     }
     @Test public void autostartWaitsForLateEmbedPlayerAndStopsAfterPlaybackAndManualPause(){
@@ -227,6 +232,19 @@ public final class AutomaticPresentationTest {
         log.adObservation("{\"event\":\"ad-layer\",\"kind\":\"freedisc-panel-1\",\"visible\":true,\"coversVideo\":true,\"text\":\"secret\",\"source\":\"https://private.example/?token=secret\",\"width\":999999}","https://freedisc.pl");
         org.json.JSONObject item=new org.json.JSONObject(log.export()).getJSONArray("events").getJSONObject(0);
         assertTrue(item.getBoolean("visible"));assertTrue(item.getBoolean("coversVideo"));assertEquals(16384,item.getInt("width"));assertFalse(item.has("text"));assertFalse(item.has("source"));assertFalse(log.export().contains("secret"));
+    }
+
+    @Test public void captchaEditorStaysBelowTheImageAndChromeReturnsAfterConfirmation(){
+        String image="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='100'%3E%3Crect width='320' height='100' fill='white'/%3E%3Ctext x='15' y='70' font-size='60'%3ETEST%3C/text%3E%3C/svg%3E";
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            load(scenario,"<div style='height:300px'>Header</div><form><img id='captcha_image' src=\""+image+"\"><input name='captcha_code' id='manual'><button>Wchodzę</button></form>");
+            await(scenario,a->((View)field(a,"codeRow")).isShown()&&web(a).getHeight()>0,"Captcha editor missing");
+            scenario.onActivity(a->{android.widget.LinearLayout parent=(android.widget.LinearLayout)field(a,"content");assertTrue(parent.indexOfChild(web(a))<parent.indexOfChild((View)field(a,"codeRow")));int[] editor=new int[2],player=new int[2];((View)field(a,"codeRow")).getLocationOnScreen(editor);web(a).getLocationOnScreen(player);assertTrue(editor[1]>=player[1]+web(a).getHeight()-2);});
+            long end=SystemClock.elapsedRealtime()+10000;
+            while(!"true".equals(eval(scenario,"(function(){var r=document.getElementById('captcha_image').getBoundingClientRect();return r.top>=-2&&r.bottom<=innerHeight+2&&r.height>0})()"))){if(SystemClock.elapsedRealtime()>end)fail("Captcha image is outside the visible viewport");SystemClock.sleep(100);}
+            eval(scenario,"document.getElementById('manual').remove();true");
+            await(scenario,a->!((View)field(a,"codeRow")).isShown(),"Chrome did not restore after verification");
+        }
     }
 
 }

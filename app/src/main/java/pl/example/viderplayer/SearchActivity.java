@@ -75,6 +75,8 @@ public final class SearchActivity extends Activity {
     private java.util.List<View> tvLastRow=new java.util.ArrayList<>();
     private SiteSource selectedSource = SiteSource.VIDER;
     private GoogleFallback google;
+    private androidx.webkit.ScriptHandler searchEpochScript;
+    private String searchEpoch;
     private String requestedTitle;
     private boolean fallbackUsed,forceGoogle;
 
@@ -98,6 +100,7 @@ public final class SearchActivity extends Activity {
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
+        screen.addOnLayoutChangeListener((v,l,t,rr,b,ol,ot,or,ob)->{if(v.getRootWindowInsets()!=null)TvUi.applyInsets(v,v.getRootWindowInsets());});
         screen.requestApplyInsets();
         TextView brand = text(television?"VideoPlayer TV":"VideoPlayer", television?22:26, Color.WHITE);
         brand.setTypeface(null, Typeface.BOLD);
@@ -379,7 +382,7 @@ public final class SearchActivity extends Activity {
         String title = query.getText().toString().trim();
         if (title.isEmpty()) { query.setError("Wpisz tytuł filmu"); return; }
         long now = android.os.SystemClock.elapsedRealtime();
-        if (lastSearchAt != 0 && now - lastSearchAt < 2000) {
+        if (searchRunning && lastSearchAt != 0 && now - lastSearchAt < 700) {
             if(!searchRunning)status.setText("Poczekaj chwilę przed kolejnym wyszukiwaniem."); return;
         }
         collection="results";clearCollection.setVisibility(View.GONE);
@@ -412,6 +415,10 @@ public final class SearchActivity extends Activity {
         diagnostics.clear();
         diagnostics.add("search.start", requestedSearch, 0);
         diagnostics.add("search.source." + selectedSource.name().toLowerCase(java.util.Locale.ROOT), null, 0);
+        if(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)){
+            searchEpoch=java.util.UUID.randomUUID().toString();
+            searchEpochScript=androidx.webkit.WebViewCompat.addDocumentStartJavaScript(engine,"window.__vpSearchEpoch="+JSONObject.quote(searchEpoch)+";",UrlPolicy.mediaOrigins());
+        }
         armSearchTimeout();
         // Freedisc's own search button routes from its initialized desktop page.
         if(forceGoogle){startGoogle();return;}
@@ -442,6 +449,7 @@ public final class SearchActivity extends Activity {
         });
     }
     private void stopSearch() {
+        if(searchEpochScript!=null){searchEpochScript.remove();searchEpochScript=null;}searchEpoch=null;
         if(google!=null){GoogleFallback previous=google;google=null;previous.dispose();}
         searchRunning = false;
         ++requestGeneration;
@@ -516,7 +524,8 @@ public final class SearchActivity extends Activity {
         if (google!=null)return;
         if (!active || token != scanToken || (!searchRunning && verificationPanel == null)
                 || SiteSource.fromUrl(engine.getUrl()) != selectedSource) return;
-        engine.evaluateJavascript(asset("search-state.js"), value -> {
+        String inspection=searchEpoch==null?asset("search-state.js"):"(function(){if(window.__vpSearchEpoch!=="+JSONObject.quote(searchEpoch)+")return JSON.stringify({stage:'loading'});return "+asset("search-state.js")+";})()";
+        engine.evaluateJavascript(inspection, value -> {
             if (!active || token != scanToken) return;
             String stage = "results";
             try {
@@ -524,6 +533,7 @@ public final class SearchActivity extends Activity {
                 stage = state.optString("stage", "results");
                 if (attempt == 0) diagnostics.add("search.dom_links", null, Math.min(10000, state.optInt("anchors")));
             } catch (Exception ignored) { }
+            if("loading".equals(stage)){handler.postDelayed(()->inspect(token,attempt+1),500);return;}
             if (!"results".equals(stage)) {
                 diagnostics.add("search.verification_required", null,
                     "verification".equals(stage) ? 1 : ("consent".equals(stage) ? 2 : 3));
@@ -611,6 +621,7 @@ public final class SearchActivity extends Activity {
             ? selectedSource.label + " sprawdza dostęp już przy wyszukiwaniu. Wpisz kod w polu aplikacji, wybierz „Wstaw kod”, potem przycisk na stronie."
             : "Dokończ wymagany przez " + selectedSource.label + " krok. Potem wrócimy do miniatur.", 13, Color.LTGRAY);
         explanation.setPadding(dp(16), 0, dp(16), dp(8));
+        if(television){heading.setTextSize(16);explanation.setTextSize(12);explanation.setMaxLines(2);}
         verificationPanel.addView(explanation);
         LinearLayout actions = new LinearLayout(this);
         addButton(actions, "Klawiatura", this::showVerificationKeyboard);
@@ -945,6 +956,7 @@ public final class SearchActivity extends Activity {
     }
     @Override protected void onDestroy() {
         active = false; handler.removeCallbacksAndMessages(null); thumbnails.close();
+        if(searchEpochScript!=null){searchEpochScript.remove();searchEpochScript=null;}
         if(google!=null){google.dispose();google=null;}
         dismissVerification();
         android.view.ViewGroup owner = (android.view.ViewGroup) engine.getParent();

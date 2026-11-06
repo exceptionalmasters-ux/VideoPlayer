@@ -4,7 +4,7 @@ import static org.junit.Assert.*;
 public final class TvKeysTest {
  @Test public void arrowsAndCenterControlFullscreenButBackStaysNative(){
   assertEquals("back",TvKeys.fullscreen(21));assertEquals("forward",TvKeys.fullscreen(22));
-  assertEquals("toggle",TvKeys.fullscreen(23));assertEquals("controls",TvKeys.fullscreen(19));
+  assertEquals("toggle",TvKeys.fullscreen(23));assertEquals("toggle",TvKeys.fullscreen(160));assertEquals("toggle",TvKeys.fullscreen(96));assertEquals("toggle",TvKeys.fullscreen(62));assertEquals("controls",TvKeys.fullscreen(19));
   assertEquals("controls",TvKeys.fullscreen(20));assertNull(TvKeys.fullscreen(4));
  }
  @Test public void mediaButtonsAreSeparateFromNormalMenuArrows(){
@@ -13,3 +13,4 @@ public final class TvKeysTest {
   assertEquals("forward",TvKeys.media(90));assertNull(TvKeys.media(21));assertNull(TvKeys.media(23));
  }
 }
+

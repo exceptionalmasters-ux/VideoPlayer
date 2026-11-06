@@ -525,3 +525,17 @@ test('Google challenges wait for manual access and only explicit empty results a
   assert.equal(googleFixture([], 'FREEDISC',{captcha:true}).stage,'access');
   assert.equal(googleFixture([]).stage,'pending');assert.equal(googleFixture([], 'FREEDISC',{empty:'Nie znaleziono wyników'}).stage,'complete');
 });
+
+test('native media messages address the authenticated player frame and cancel automatic retries',()=>{
+  const f=progressFixture(0),calls=[];
+  f.window.__vpTvCommand=(action,id)=>{calls.push([action,id]);return true;};f.window.__vpCancelAutoStart=()=>calls.push('cancel');f.window.__vpTvTouchParent=origin=>calls.push(origin);
+  f.window.vpPlayback.onmessage({data:JSON.stringify({type:'media-command',token:'wrong',action:'toggle',requestId:'x',manual:true})});assert.equal(calls.length,0);
+  f.window.vpPlayback.onmessage({data:JSON.stringify({type:'media-command',token:'test-token',action:'toggle',requestId:'ok',parentOrigin:'https://vider.pl',manual:true})});
+  assert.deepEqual(calls,['cancel','https://vider.pl',['toggle','ok']]);assert.equal(f.messages.at(-1).event,'media-command-result');assert.equal(f.messages.at(-1).handled,true);
+});
+test('Google scrolling reaches an inner cookie panel without mutating a form',()=>{
+  const changes=[];const inner={clientHeight:200,scrollHeight:1200,scrollTop:0,parentElement:null,getBoundingClientRect:()=>({left:0,right:600,top:0,bottom:200}),scrollBy:(x,y)=>changes.push(y)};
+  const context={window:{innerHeight:400,innerWidth:600,scrollBy:()=>changes.push('outer')},document:{elementFromPoint:()=>inner,querySelectorAll:()=>[inner]},getComputedStyle:()=>({overflowY:'auto',display:'block',visibility:'visible'})};
+  assert.equal(vm.runInNewContext(asset('google-scroll.js').replace('__VP_DIRECTION__','1'),context),true);assert.deepEqual(changes,[140]);inner.scrollTop=140;
+  vm.runInNewContext(asset('google-scroll.js').replace('__VP_DIRECTION__','-1'),context);assert.deepEqual(changes,[140,-140]);
+});
