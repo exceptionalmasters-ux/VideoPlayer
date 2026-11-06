@@ -82,7 +82,7 @@ public final class GoogleFallbackTest {
             scenario.onActivity(a->startFallback(a,url->cards()));await(scenario,a->((GridLayout)field(a,"grid")).getChildCount()==1,"First query missing");
             scenario.onActivity(a->startFallback(a,url->cookies));
             await(scenario,a->google(a)!=null&&google(a).accessOpen()&&google(a).engine.isLaidOut(),"Identical query did not start a fresh Google request");
-            scenario.onActivity(a->google(a).scroll(1));AtomicReference<String> scrolled=new AtomicReference<>();long end=SystemClock.elapsedRealtime()+5000;
+            scenario.onActivity(a->{if(TvUi.enabled(a))assertTrue(google(a).key(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_DPAD_DOWN)));else google(a).scroll(1);});AtomicReference<String> scrolled=new AtomicReference<>();long end=SystemClock.elapsedRealtime()+5000;
             do{scenario.onActivity(a->google(a).engine.evaluateJavascript("document.getElementById('cookie_scroll').scrollTop>0",scrolled::set));if("true".equals(scrolled.get()))break;SystemClock.sleep(100);}while(SystemClock.elapsedRealtime()<end);
             assertEquals("true",scrolled.get());
         }

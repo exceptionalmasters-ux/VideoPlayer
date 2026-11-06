@@ -122,7 +122,7 @@ final class GoogleFallback {
     boolean accessOpen(){return panel!=null;}
     boolean key(KeyEvent e){
         if(pointer!=null&&pointer.key(e))return true;
-        if(panel!=null&&TvUi.enabled(activity)&&engine.hasFocus()&&(e.getKeyCode()==KeyEvent.KEYCODE_DPAD_UP||e.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN)){if(e.getAction()==KeyEvent.ACTION_DOWN)scroll(e.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN?1:-1);return true;}
+        if(panel!=null&&TvUi.enabled(activity)&&(e.getKeyCode()==KeyEvent.KEYCODE_DPAD_UP||e.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN)){if(e.getAction()==KeyEvent.ACTION_DOWN)scroll(e.getKeyCode()==KeyEvent.KEYCODE_DPAD_DOWN?1:-1);return true;}
         if(panel!=null&&TvUi.enabled(activity)&&e.getKeyCode()==KeyEvent.KEYCODE_MENU){if(e.getAction()==KeyEvent.ACTION_UP&&pointer!=null)pointer.toggle();return true;}
         return false;
     }
