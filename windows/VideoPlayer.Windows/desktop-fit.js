@@ -6,9 +6,33 @@
   const origins=['https://freedisc.pl','https://www.freedisc.pl','https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl','https://vider.info','https://www.vider.info','https://vider.pl','https://www.vider.pl'];
   window.__vpSetDesktopFit=function(on,parent){intent=on===true;if(origins.includes(parent))parentOrigin=parent;fit();if(intent&&window.parent!==window&&parentOrigin)window.parent.postMessage({type:'vp-desktop-frame-ready',page:location.href},parentOrigin);};
   window.addEventListener('message',function(e){
-    if(!origins.includes(e.origin)||!e.data||e.data.type!=='vp-desktop-frame-ready')return;
-    try{const u=new URL(e.data.page);if(u.origin!==e.origin||!/^\/embed(?:\/|,)/.test(u.pathname))return;}catch(_){return;}
-    for(const frame of document.querySelectorAll('iframe'))if(frame.contentWindow===e.source){frame.setAttribute('data-vp-win-frame','');fit();break;}
+    if(!origins.includes(e.origin)||!e.data)return;
+    if(e.data.type==='vp-desktop-frame-ready'){
+      try{const u=new URL(e.data.page);if(u.origin!==e.origin||!/^\/embed(?:\/|,)/.test(u.pathname))return;}catch(_){return;}
+      for(const frame of document.querySelectorAll('iframe'))if(frame.contentWindow===e.source){frame.__vpDesktopFramePage=e.data.page;frame.setAttribute('data-vp-win-frame','');fit();break;}
+      return;
+    }
+    // The shared relay uses iframe.src; a script-navigated Freedisc frame may have no src attribute.
+    const d=e.data;
+    if(!intent||d.type!=='vp-tv-play-tap'||typeof d.id!=='string'||d.id.length>80||!Number.isFinite(d.x)||!Number.isFinite(d.y)||d.x<0||d.x>1||d.y<0||d.y>1)return;
+    for(const frame of document.querySelectorAll('iframe[data-vp-win-frame]')){
+      if(frame.contentWindow!==e.source||!frame.__vpDesktopFramePage)continue;
+      try{
+        if(new URL(frame.__vpDesktopFramePage).origin!==e.origin)return;
+        const declared=new URL(frame.getAttribute('src')||'',location.href);
+        if(declared.origin===e.origin&&/^\/embed(?:\/|,)/.test(declared.pathname))return;
+        const r=frame.getBoundingClientRect();if(!frame.offsetWidth||!frame.offsetHeight)return;
+        const x=r.left+(frame.clientLeft+d.x*frame.clientWidth)*r.width/frame.offsetWidth;
+        const y=r.top+(frame.clientTop+d.y*frame.clientHeight)*r.height/frame.offsetHeight;
+        if(document.elementFromPoint(x,y)!==frame)return;
+        const v=window.visualViewport,w=v?v.width:innerWidth,h=v?v.height:innerHeight;
+        const point={type:'vp-tv-play-tap',id:d.id,x:(x-(v?v.offsetLeft:0))/w,y:(y-(v?v.offsetTop:0))/h};
+        if(point.x<0||point.x>1||point.y<0||point.y>1)return;
+        if(window.parent===window){if(window.vpTvTouch)window.vpTvTouch.postMessage(JSON.stringify(point));}
+        else if(parentOrigin)window.parent.postMessage(point,parentOrigin);
+      }catch(_){}
+      return;
+    }
   });
   function fit(){
     const focused=document.querySelector('[data-vp-player]');
