@@ -11,7 +11,7 @@ public partial class MainWindow
     private EpisodePlan? nextEpisode;
     private WebView2? episodeBrowser;
     private DispatcherTimer? episodeTimer;
-    private bool episodeVerification;
+    private bool episodeVerification,episodeDocumentReady;
     private bool episodeBusy,episodeGoogle,episodeRouted,episodeFallback,episodeAccess,episodeOffer,episodeDone;
     private Source episodeSource;
     private string episodeQuery="";
@@ -42,7 +42,8 @@ public partial class MainWindow
                 Workspace.Children.Insert(0,episodeBrowser);
                 await episodeBrowser.EnsureCoreWebView2Async(Browser.CoreWebView2.Environment);
                 var c=episodeBrowser.CoreWebView2;c.Settings.AreHostObjectsAllowed=false;c.Settings.IsWebMessageEnabled=false;c.Settings.AreDevToolsEnabled=false;
-                c.NavigationStarting+=(_,e)=>{if(!(episodeGoogle?Policy.Google(e.Uri):Policy.Allowed(e.Uri)&&Policy.Site(e.Uri)==episodeSource))e.Cancel=true;};
+                c.NavigationCompleted+=(_,e)=>episodeDocumentReady=e.IsSuccess;
+                c.NavigationStarting+=(_,e)=>{episodeDocumentReady=false;episodeAccess=false;if(!(episodeGoogle?Policy.Google(e.Uri):Policy.Allowed(e.Uri)&&Policy.Site(e.Uri)==episodeSource))e.Cancel=true;};
                 c.NewWindowRequested+=(_,e)=>e.Handled=true;c.DownloadStarting+=(_,e)=>e.Cancel=true;c.PermissionRequested+=(_,e)=>e.State=CoreWebView2PermissionState.Deny;
                 episodeTimer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(1)};episodeTimer.Tick+=async(_,_)=>await InspectEpisode();
             }
@@ -59,7 +60,14 @@ public partial class MainWindow
         episodeBusy=true;var current=epoch;
         try
         {
+            if(DateTime.UtcNow>episodeDeadline&&!episodeAccess)
+            {
+                if(!episodeGoogle){episodeGoogle=true;episodeDeadline=DateTime.UtcNow.AddSeconds(35);episodeBrowser!.CoreWebView2.Navigate(Policy.GoogleSearch(episodeSource,episodeQuery));}
+                else{episodeDone=true;episodeTimer?.Stop();if(episodeOffer)RefreshEpisodeOffer();}
+                return;
+            }
             var url=episodeBrowser!.CoreWebView2.Source;
+            if(!episodeDocumentReady)return;
             if(!(episodeGoogle?Policy.Google(url):Policy.Allowed(url)))return;
             List<MovieCard> rows;bool complete=false;
             if(episodeGoogle)
@@ -75,6 +83,7 @@ public partial class MainWindow
                 episodeAccess=doc.RootElement.TryGetProperty("stage",out var stage)&&stage.GetString()!="results";
                 if(!episodeAccess&&episodeSource==Source.Freedisc&&!episodeRouted)
                     episodeRouted=await EpisodeEval(Script("freedisc-search.js").Replace("__VP_SEARCH_URL__",JsonSerializer.Serialize(Policy.Search(episodeSource,episodeQuery))))=="routed";
+                if(!episodeAccess&&!SearchDocumentMatches(episodeBrowser.CoreWebView2.Source,episodeSource,episodeQuery))return;
                 rows=JsonSerializer.Deserialize<List<MovieCard>>(await EpisodeEval(Script("search-results.js"))??"[]")??[];
                 using var outcome=JsonDocument.Parse(await EpisodeEval(Script("search-outcome.js"))??"{}");
                 complete=outcome.RootElement.TryGetProperty("empty",out var empty)&&empty.GetBoolean();

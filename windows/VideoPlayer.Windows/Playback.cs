@@ -10,13 +10,13 @@ public partial class MainWindow
     private Window? episodeWindow;
     private void ResetPlayback(){endpoints.Clear();autoStart=true;episodeOffer=false;nextEpisode=null;episodeTimer?.Stop();episodeBrowser?.CoreWebView2?.Stop();episodeWindow?.Close();episodeWindow=null;nextEpisode=null;}
     private static bool MediaOrigin(string value)=>Policy.Allowed(value)||Uri.TryCreate(value,UriKind.Absolute,out var u)&&u.Scheme=="https"&&u.Port==443&&u.UserInfo.Length==0&&new[]{"stream.freedisc.pl","stream2.freedisc.pl","ovh.freedisc.pl"}.Contains(u.IdnHost);
-    private void ConfigurePlayback(CoreWebView2 core)
+    private async Task ConfigurePlayback(CoreWebView2 core)
     {
-        core.WebMessageReceived+=(_,e)=>PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),core.PostWebMessageAsJson);
+        core.WebMessageReceived+=(_,e)=>SafeMessage(e,core.PostWebMessageAsJson);
         core.FrameCreated+=(_,args)=>
         {
             var frame=args.Frame;
-            frame.WebMessageReceived+=(_,e)=>PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),frame.PostWebMessageAsJson);
+            frame.WebMessageReceived+=(_,e)=>SafeMessage(e,frame.PostWebMessageAsJson);
         };
         var wrapper="""
         if(/^https:\/\/(www\.)?(vider\.(info|pl)|freedisc\.pl)$/.test(location.origin)||['https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl'].includes(location.origin)){
@@ -24,8 +24,10 @@ public partial class MainWindow
         window.chrome.webview.addEventListener('message',function(e){if(window.vpPlayback.onmessage)window.vpPlayback.onmessage({data:JSON.stringify(e.data)})});
         document.addEventListener('keydown',function(e){if(e.defaultPrevented||e.ctrlKey||e.altKey||e.metaKey||e.repeat)return;const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)))return;if(!document.querySelector('video,.jwplayer,[data-vp-player]'))return;const a=e.code==='Space'||e.code==='Enter'?'toggle':e.code==='ArrowLeft'?'back':e.code==='ArrowRight'?'forward':null;if(a){e.preventDefault();window.chrome.webview.postMessage(JSON.stringify({event:'key',page:location.href,action:a}))}},true);
         """;
-        _=core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n}");
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n}");
     }
+    private void SafeMessage(CoreWebView2WebMessageReceivedEventArgs e,Action<string> reply)
+    {try{PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),reply);}catch(Exception error){Log("bridge."+error.GetType().Name);}}
     private void PlaybackMessage(string origin,string json,Action<string> reply)
     {
         try
@@ -78,6 +80,11 @@ public partial class MainWindow
         collection="results";searchCards=[];Cards.Children.Clear();Welcome.Visibility=Visibility.Collapsed;PlayerTools.Visibility=Visibility.Collapsed;
         Browser.CoreWebView2.Stop();Browser.CoreWebView2.Navigate(Policy.GoogleSearch(source,activeQuery));
         ShowBrowser();Status.Text="Awaryjne wyszukiwanie Google · w razie potrzeby potwierdź zgodę na stronie. Wyniki pojawią się jako kafelki.";
+    }
+    private static bool SearchDocumentMatches(string url,Source selected,string query)
+    {
+        if(!Policy.Allowed(url)||Policy.Site(url)!=selected)return false;
+        return Uri.UnescapeDataString(new Uri(url).AbsolutePath).TrimEnd('/')==Uri.UnescapeDataString(new Uri(Policy.Search(selected,query)).AbsolutePath).TrimEnd('/');
     }
     private async Task<bool> SearchEmpty(int current)
     {

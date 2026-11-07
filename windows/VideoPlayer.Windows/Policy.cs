@@ -13,7 +13,7 @@ public static class Policy
     public static bool Google(string? value) => Uri.TryCreate(value,UriKind.Absolute,out var u) && u.Scheme=="https" && u.Port==443 && u.UserInfo.Length==0 && ((u.IdnHost is "www.google.com" or "www.google.pl" or "google.com" or "google.pl") && (u.AbsolutePath is "/search" or "/sorry" || u.AbsolutePath.StartsWith("/sorry/")) || u.IdnHost is "consent.google.com" or "consent.google.pl");
     public static string GoogleSearch(Source source,string query) => "https://www.google.com/search?hl=pl&q="+Uri.EscapeDataString(query.Trim()+(source==Source.Freedisc?" freedisc site:freedisc.pl":" vider (site:vider.info OR site:vider.pl)"));
     public static bool HomePage(string? value) => Allowed(value) && new Uri(value!).AbsolutePath == "/";
-    public static bool Thumbnail(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var u) && u.Scheme == "https" && u.Port == 443 && u.UserInfo.Length == 0 && new[] { "img.vider.info", "img.freedisc.pl" }.Contains(u.IdnHost.ToLowerInvariant());
+    public static bool Thumbnail(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var u) && u.Scheme == "https" && u.Port == 443 && u.UserInfo.Length == 0 && new[] { "img.vider.info", "img.freedisc.pl", "encrypted-tbn0.gstatic.com", "encrypted-tbn1.gstatic.com", "encrypted-tbn2.gstatic.com", "encrypted-tbn3.gstatic.com" }.Contains(u.IdnHost.ToLowerInvariant());
     public static string Redact(string? value) => Allowed(value) ? new Uri(value!).GetLeftPart(UriPartial.Authority) + (Movie(value) ? "/[movie]" : "/[page]") : "[external]";
 }
 public sealed class Presentation

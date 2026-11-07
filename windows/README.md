@@ -35,3 +35,16 @@ Skrypty JS są osadzane bezpośrednio z `app/src/main/assets` podczas kompilacji
 ## Historia i ulubione
 
 Zakładki **Historia** i **Ulubione** pokazują własne, lokalne kolekcje jako kafelki. Historia przechowuje 200 ostatnio otwieranych filmów; ponowne otwarcie przenosi film na początek. Każdy kafelek ma przycisk dodania/usunięcia z ulubionych. Na listach można usuwać pojedyncze pozycje, a przycisk Wyczyść listę wymaga potwierdzenia. Wyczyszczenie historii nie usuwa ulubionych. Dane zapisują się w `%LOCALAPPDATA%\VideoPlayer\collections.json`; nie synchronizują się z Androidem ani kontami serwisów. Gdy film otwierany jest z wklejonego linku i nie udostępnia miniaturki, kafelek pokazuje symbol odtwarzania.
+
+
+## Wersja 0.3.0
+
+- Linki Freedisc `/embed/video/ID?match=1` otwierają film; wpis embed i zwykły link tego samego pliku dzielą historię oraz punkt wznowienia.
+- Gdy wyszukiwanie serwisu nie odpowiada, aplikacja próbuje Google. Dostępny jest także przycisk „Szukaj w Google”. Wyniki są filtrowane do wybranego serwisu i wyświetlane jako kafelki. Zgodę i CAPTCHA użytkownik potwierdza ręcznie w aplikacji.
+- Kolejne wyszukiwanie tej samej frazy rozpoczyna nową nawigację. Wyniki są czytane dopiero z właściwej strony wyszukiwania.
+- Oryginalny odtwarzacz dostaje polecenie startu; aplikacja otwiera widok filmu na pełnym ekranie. Spacja / Enter przełączają odtwarzanie, strzałki lewo/prawo przewijają o 10 sekund. Skróty nie przejmują wpisywania w polach formularzy. F11 przełącza pełny ekran, Esc przywraca przyciski.
+- Postęp jest zapisywany lokalnie co około 5 sekund. Ponowne otwarcie filmu z historii przywraca pozycję. Zakończony film zaczyna się od początku. Zmiana długości materiału chroni przed wznowieniem innej wersji filmu w niewłaściwym miejscu.
+- Dla tytułów z numerem `S01E01`, `S1E01` lub `1x01` wyszukiwanie kolejnego odcinka zaczyna się 40 sekund przed końcem. Małe kafelki pojawiają się 10 sekund przed końcem w oknie nad filmem. Film gra dalej do kliknięcia propozycji. Dopiero potwierdzony brak odcinka uruchamia szukanie pierwszego odcinka następnego sezonu; błąd sieci i CAPTCHA nie oznaczają końca sezonu.
+- Reklamy pozostają obsługiwane przez oryginalny odtwarzacz.
+
+Walidacja: testy polityk adresów i trwałości kolekcji, 44 wspólne testy skryptów oraz test integracyjny WPF/WebView2 na Windows (pełny ekran, przywracanie strony, most odtwarzania, zapis pozycji, Play/Pauza, filtrowanie wyników Google). Test używa lokalnych kontrolowanych stron; działanie konkretnych serwisów nadal zależy od ich dostępności i zmian.

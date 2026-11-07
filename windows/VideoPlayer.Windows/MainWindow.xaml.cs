@@ -69,7 +69,7 @@ public partial class MainWindow : Window
             try { collections=new MovieCollections(Path.Combine(smoke?path:Path.GetDirectoryName(path)!,"collections.json")); }
             catch (Exception error) when(error is IOException or UnauthorizedAccessException or JsonException)
             { Log("collections.load."+error.GetType().Name); }
-            var environment = await CoreWebView2Environment.CreateAsync(null, path);
+            var environment = await CoreWebView2Environment.CreateAsync(null, path, new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments="--autoplay-policy=no-user-gesture-required" });
             await Browser.EnsureCoreWebView2Async(environment);
             if (closed) return;
             var core = Browser.CoreWebView2;
@@ -77,7 +77,7 @@ public partial class MainWindow : Window
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.AreHostObjectsAllowed = false;
             core.Settings.IsWebMessageEnabled = true;
-            ConfigurePlayback(core);
+            await ConfigurePlayback(core);
             core.NavigationStarting += Navigating;
             core.NavigationCompleted += (_, args) =>
             {
@@ -195,6 +195,7 @@ public partial class MainWindow : Window
                     if (closed || current != epoch) return;
                     routed = result == "routed";
                 }
+                if(!SearchDocumentMatches(url,source,activeQuery))return;
                 var json = await Eval(Script("search-results.js"));
                 if (closed || current != epoch) return;
                 var found = JsonSerializer.Deserialize<List<MovieCard>>(json ?? "[]") ?? [];
@@ -328,6 +329,7 @@ public partial class MainWindow : Window
     {
         source = SourcePicker.SelectedIndex == 1 ? Source.Freedisc : Source.Vider;
         if (!ready) return;
+        episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeWindow=null;
         ++epoch; mode = Mode.Results; searching = false; movieTarget = null; LeaveFullscreen(); Browser.CoreWebView2.Stop(); Browser.CoreWebView2.Navigate("about:blank");
         Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible; PlayerTools.Visibility = Visibility.Collapsed; Cards.Children.Clear(); Welcome.Visibility = Visibility.Visible;collection="results";searchCards=[];ClearCollection.Visibility=Visibility.Collapsed;
         Status.Text = "Wybrano " + (source == Source.Vider ? "Vider" : "Freedisc") + ". Wpisz tytuł i wybierz Szukaj.";
@@ -362,6 +364,7 @@ public partial class MainWindow : Window
     }
     private void ShowCollection(string selected)
     {
+        episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeWindow=null;
         ++epoch; LeaveFullscreen();mode=Mode.Results;searching=false;
         if(ready){Browser.CoreWebView2.Stop();Browser.CoreWebView2.Navigate("about:blank");}
         collection=selected;PlayerTools.Visibility=Visibility.Collapsed;RefreshCollection();
@@ -441,7 +444,29 @@ public partial class MainWindow : Window
         CollectionAction(()=>collections?.Clear("history"));RefreshCollection();if(Cards.Children.Count!=0)throw new Exception("History clear failed");
         ShowCollection("favorites");if(Cards.Children.Count!=1)throw new Exception("Favorites independent from history failed");
         CollectionAction(()=>collections?.Remove("favorites",cards[0].url));RefreshCollection();if(Cards.Children.Count!=0)throw new Exception("Favorite removal failed");
-        WriteSmoke("PASS: WebView2 startup, automatic film focus, native fullscreen, no autoplay, manual exit, page restore, challenge detection, search extraction, native cards, local history/favorites tiles and independent deletion.");
+        // Exercise the real document-created WebView2 bridge with the site's JW event contract.
+        mode=Mode.Movie;OpenMovie(fixtureUrl);
+        await Task.Delay(1500);
+        await Browser.ExecuteScriptAsync("window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){this.state='playing'},pause(){this.state='paused'},seek(p){this.position=p},getPosition(){return this.position||0}};window.jwplayer=()=>window.smokePlayer;");
+        var bridgeDeadline=DateTime.UtcNow.AddSeconds(8);
+        while(endpoints.Count==0){if(DateTime.UtcNow>bridgeDeadline)throw new Exception("Playback bridge handshake failed");await Task.Delay(100);}
+        await Browser.ExecuteScriptAsync("window.smokePlayer.events.time({position:123,duration:7200})");
+        await Task.Delay(300);
+        if(collections?.Find(fixtureUrl)?.Position!=123)throw new Exception("Playback progress persistence failed");
+        MediaCommand("play");await Task.Delay(200);
+        if(await Browser.ExecuteScriptAsync("window.smokePlayer.state")!="\"playing\"")throw new Exception("Play command bridge failed");
+        MediaCommand("pause");await Task.Delay(200);
+        if(await Browser.ExecuteScriptAsync("window.smokePlayer.state")!="\"paused\"")throw new Exception("Pause command bridge failed");
+        const string googleFixture="https://www.google.com/search?hl=pl&q=smoke";
+        Browser.CoreWebView2.AddWebResourceRequestedFilter(googleFixture,CoreWebView2WebResourceContext.Document);
+        Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{if(args.Request.Uri==googleFixture)args.Response=Browser.CoreWebView2.Environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<!doctype html><a href='https://freedisc.pl/embed/video/8307530?match=1'><h3>Ronin 1998</h3></a><a href='https://evil.test/movie'><h3>External</h3></a>")),200,"OK","Content-Type: text/html; charset=utf-8");};
+        LeaveFullscreen();mode=Mode.Search;googleSearch=true;searching=true;source=Source.Freedisc;
+        var googleComplete=new TaskCompletionSource();
+        EventHandler<CoreWebView2NavigationCompletedEventArgs> googleHandler=(_,args)=>{if(args.IsSuccess)googleComplete.TrySetResult();else googleComplete.TrySetException(new Exception("Google fixture failed"));};
+        Browser.CoreWebView2.NavigationCompleted+=googleHandler;Browser.CoreWebView2.Navigate(googleFixture);await googleComplete.Task.WaitAsync(TimeSpan.FromSeconds(15));Browser.CoreWebView2.NavigationCompleted-=googleHandler;
+        await ReadGoogle(epoch);
+        if(searchCards.Count!=1||!searchCards[0].url.EndsWith("?match=1")||Cards.Children.Count!=1)throw new Exception("Scoped Google embed tiles failed");
+        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, scoped Google embed tiles.");
         Application.Current.Shutdown(0);
     }
 }
