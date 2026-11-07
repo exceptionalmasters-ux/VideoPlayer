@@ -4,7 +4,7 @@
     <Grid x:Name="Header" Margin="24,22,24,12">
       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <StackPanel Orientation="Horizontal"><TextBlock Text="▶" Foreground="{StaticResource Accent}" FontSize="32" Margin="0,0,14,0"/><StackPanel><TextBlock Text="VideoPlayer" FontSize="27" FontWeight="SemiBold"/><TextBlock Text="Twoje filmy. Jeden wygodny widok." Foreground="#9FB4C0" FontSize="13"/></StackPanel></StackPanel>
-      <TextBlock Grid.Column="1" Text="WINDOWS · 0.3.2" Foreground="#79DFC7" VerticalAlignment="Center" FontSize="12"/>
+      <TextBlock Grid.Column="1" Text="WINDOWS · 0.3.3" Foreground="#79DFC7" VerticalAlignment="Center" FontSize="12"/>
     </Grid>
     <Grid x:Name="SearchBar" Grid.Row="1" Margin="24,0,24,12">
       <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
