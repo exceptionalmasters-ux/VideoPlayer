@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-windows-0.3.5
+  group: publish-windows-0.3.6
   cancel-in-progress: false
 jobs:
   publish:
@@ -21,12 +21,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          test "$(gh api repos/$GH_REPO/actions/runs/42417313209 --jq '.conclusion')" = success
-          test "$(gh api repos/$GH_REPO/actions/runs/42417313209 --jq '.head_sha')" = 56a3c5d2c7e48f4225c3f59445b13b8c7780dbe8
+          test "$(gh api repos/$GH_REPO/actions/runs/42422265967 --jq '.conclusion')" = success
+          test "$(gh api repos/$GH_REPO/actions/runs/42422265967 --jq '.head_sha')" = 155b5808d174aabfc4e011713c64fc660028fcc3
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-Windows-x64
-          run-id: 42417313209
+          run-id: 42422265967
           github-token: ${{ github.token }}
           path: verified
       - name: Publish verified Windows EXE
@@ -35,11 +35,15 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.5-x64.exe
-          echo '86c187f4f88d38753f6c24b8ab3baeb97a69a293c1dd3eccbb0718bd9b0d16fe  VideoPlayer-Windows-0.3.5-x64.exe' > SHA256-Windows-0.3.5.txt
-          sha256sum -c SHA256-Windows-0.3.5.txt
+          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.6-x64.exe
+          echo 'e7beee0b4f7b7c0ae6686c43f577bbe89ac6b1d4a16889af8f76940c18c73654  VideoPlayer-Windows-0.3.6-x64.exe' > SHA256-Windows-0.3.6.txt
+          sha256sum -c SHA256-Windows-0.3.6.txt
           cat > release-notes.txt <<'NOTES'
-          VideoPlayer 0.3.5 dla Windows 10/11 x64.
+          VideoPlayer 0.3.6 dla Windows 10/11 x64.
+          Odbiór wiadomości i zegara filmu także z głęboko zagnieżdżonych ramek. Dopasowanie, oryginalny Play, historia i sygnał końca korzystają z właściwego poziomu odtwarzacza.
+          Zegar kolejnego odcinka działa niezależnie od oczekiwania na wznowienie. Panel można otworzyć klawiszem N albo przyciskiem Następny odcinek.
+          Panel pokazuje odebrany czas i stan wyszukiwania; rozszerzony raport zapisuje stan ramek i zegara bez tytułów, cookies i kodów.
+          Test Windows obejmuje odtwarzacz w ramce wewnątrz drugiej ramki na różnych domenach, odbiór zegara z najgłębszego poziomu i uruchomienie propozycji.
           Poprawione wznawianie z historii: końcowy zapis przed wyjściem, pauzą i zamknięciem, przewinięcie po gotowości playera i ochrona punktu przed zerem przy ładowaniu.
           Historia pokazuje godzinę wznowienia. Film przerwany w ostatnich 10 sekundach również wznawia się; zakończony startuje od początku.
           Test WPF/WebView2 przerywa film, otwiera historię, ponownie uruchamia kafelek i sprawdza rzeczywistą pozycję playera. Testy obejmują także reklamy, opóźnione przewinięcie i trwałość po restarcie.
@@ -62,12 +66,12 @@ jobs:
           CAPTCHA i zgody pozostają do ręcznego potwierdzenia. Reklamy oryginalnego odtwarzacza pozostają aktywne.
           Samodzielny EXE; wymaga Microsoft Edge WebView2 Runtime. Lokalne kolekcje Windows nie synchronizują się z Androidem.
           Testy Windows/WPF/WebView2 oraz 44 testy wspólnych skryptów przeszły na kontrolowanych stronach; dostępność serwisów wymaga sprawdzenia przez użytkownika.
-          Kod aplikacji: 56a3c5d2c7e48f4225c3f59445b13b8c7780dbe8; zweryfikowany build: 42417313209.
+          Kod aplikacji: 155b5808d174aabfc4e011713c64fc660028fcc3; zweryfikowany build: 42422265967.
           NOTES
-          if gh release view windows-v0.3.5 >/dev/null 2>&1; then
-            gh release download windows-v0.3.5 --pattern VideoPlayer-Windows-0.3.5-x64.exe --output existing.exe
-            echo '86c187f4f88d38753f6c24b8ab3baeb97a69a293c1dd3eccbb0718bd9b0d16fe  existing.exe' | sha256sum -c -
+          if gh release view windows-v0.3.6 >/dev/null 2>&1; then
+            gh release download windows-v0.3.6 --pattern VideoPlayer-Windows-0.3.6-x64.exe --output existing.exe
+            echo 'e7beee0b4f7b7c0ae6686c43f577bbe89ac6b1d4a16889af8f76940c18c73654  existing.exe' | sha256sum -c -
           else
-            gh release create windows-v0.3.5 VideoPlayer-Windows-0.3.5-x64.exe SHA256-Windows-0.3.5.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.5 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
+            gh release create windows-v0.3.6 VideoPlayer-Windows-0.3.6-x64.exe SHA256-Windows-0.3.6.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.6 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
           fi
 

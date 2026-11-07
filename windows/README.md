@@ -1,4 +1,4 @@
-# VideoPlayer dla Windows — 0.3.5
+# VideoPlayer dla Windows — 0.3.6
 
 Aplikacja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
@@ -74,3 +74,11 @@ Wznowienie z historii czeka na gotowość oryginalnego odtwarzacza i potwierdzen
 Historia pokazuje godzinę wznowienia. Odróżniamy zakończony materiał od przerwanego — również ostatnie 10 sekund można wznowić. Zakończony film uruchamia się od początku. Dane starszych kolekcji są odczytywane bez usuwania historii.
 
 Testy obejmują odroczone przewinięcie po rozpoczęciu odtwarzania, ochronę przed zerem, reklamę ze zmianą elementu wideo, zapis końcowego punktu i trwałość po restarcie. Test WPF/WebView2 przerywa film między zdarzeniami czasu, przechodzi do historii, otwiera ten sam kafelek i sprawdza rzeczywistą pozycję playera oraz zapis po pauzie.
+
+## Poprawka 0.3.6
+
+Windows rejestruje teraz wiadomości również z odtwarzaczy w zagnieżdżonych ramkach, a nie tylko pierwszego poziomu. Sterowanie, czas filmu, wznawianie i zdarzenie zakończenia korzystają z najgłębszej aktywnej ramki. Każda ramka zna właściwą domenę rodzica; test obejmuje dwa poziomy na różnych domenach i ramki nawigowane skryptem bez src.
+
+Sygnał czasu dla kolejnego odcinka działa niezależnie od trwającego przywracania pozycji. Zakończenie bez udostępnionej długości również otwiera panel. Klawisz N podczas oglądania lub przycisk Następny odcinek otwiera panel ręcznie, z aktualnym czasem i stanem wyszukiwania. Skrót nie przejmuje wpisywania w polach formularzy. Panel jest pozycjonowany przez Windows nad widocznym oknem odtwarzania. Raport zawiera bieżący stan, wiek ostatniego odczytu czasu, poziomy ramek i wersję WebView2, bez tytułów wyszukiwania i danych formularzy.
+
+Test Windows sprawdza odbiór czasu i uruchomienie propozycji z najgłębszej ramki, położenie panelu w obszarze filmu, ręczne otwarcie bez zegara oraz wcześniejsze scenariusze Play, wznowienia i weryfikacji.
