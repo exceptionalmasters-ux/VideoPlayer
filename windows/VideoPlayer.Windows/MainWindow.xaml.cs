@@ -491,7 +491,7 @@ public partial class MainWindow : Window
         int clickCount=log.Count(l=>l.Contains("media.original_play_click"));
         using(var rejected=JsonDocument.Parse("{\"id\":\"unsolicited\",\"x\":0.5,\"y\":0.5}"))await TrustedPlayTap(embedRoot,rejected.RootElement);
         if(log.Count(l=>l.Contains("media.original_play_click"))!=clickCount)throw new Exception("Unsolicited click was accepted");
-        await SmokeEpisodes();
+        await SmokeEpisodes(embeddedFrame);
         const string googleFixture="https://www.google.com/search?hl=pl&q=smoke";
         Browser.CoreWebView2.AddWebResourceRequestedFilter(googleFixture,CoreWebView2WebResourceContext.Document);
         Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{if(args.Request.Uri==googleFixture)args.Response=Browser.CoreWebView2.Environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<!doctype html><a href='https://freedisc.pl/embed/video/8307530?match=1'><h3>Ronin 1998</h3></a><a href='https://evil.test/movie'><h3>External</h3></a>")),200,"OK","Content-Type: text/html; charset=utf-8");};

@@ -32,7 +32,7 @@ public partial class MainWindow
         currentMovie=new(title,"https://vider.info/vid/+fepisodecurrent","");CollectionAction(()=>collections?.Opened(currentMovie));
         ResetEpisodeState();episodeFixture=fixture;
     }
-    private async Task SmokeEpisodes()
+    private async Task SmokeEpisodes(CoreWebView2Frame embeddedFrame)
     {
         EpisodeCase("found");
         ConsiderEpisode(59,100);if(episodeStatus!=EpisodeStatus.NotStarted)throw new Exception("Episode search started before 40 seconds");
@@ -56,6 +56,10 @@ public partial class MainWindow
         if(episodeStatus!=EpisodeStatus.Unrecognized||episodeWindow?.IsVisible!=true||!EpisodeMessage().Contains("Nie rozpoznano"))throw new Exception("Unrecognized title silently skipped episode UI");
         EpisodeCase("found");episodeCurrent=EpisodePlan.Parse(currentMovie!.title);nextEpisode=episodeCurrent!.Next();episodeEpoch=epoch;episodeOffer=true;episodeStatus=EpisodeStatus.Searching;episodeGoogle=true;episodeDeadline=DateTime.UtcNow.AddSeconds(-1);
         await InspectEpisode();if(episodeStatus!=EpisodeStatus.Error||episodeWindow?.IsVisible!=true||EpisodeMessage().Contains("Nie znaleziono"))throw new Exception("Search timeout must show error, not no-match or silence");
+        EpisodeCase("empty");
+        await embeddedFrame.ExecuteScriptAsync("window.smokePlayer.getDuration=()=>100;window.smokePlayer.events.complete();");
+        await EpisodeUntil(()=>episodeStatus==EpisodeStatus.NoMatch,"Player complete event did not display an episode outcome");
+        if(episodeWindow?.IsVisible!=true)throw new Exception("Player complete event produced no visible panel");
         episodeOffer=false;episodeTimer?.Stop();var panel=episodeWindow;episodeWindow=null;panel?.Close();ResetEpisodeState();
     }
 }

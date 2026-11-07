@@ -19,6 +19,7 @@ public partial class MainWindow
     private DateTime episodeDeadline;
     private List<MovieCard> episodeCards=[];
     private int episodeEpoch,episodeGeneration;
+    private ulong episodeNavigationId;
     private Task? episodeStartTask;
     private void ResetEpisodeState()
     {
@@ -55,8 +56,8 @@ public partial class MainWindow
                 Workspace.Children.Insert(0,episodeBrowser);
                 await episodeBrowser.EnsureCoreWebView2Async(Browser.CoreWebView2.Environment);
                 var c=episodeBrowser.CoreWebView2;c.Settings.AreHostObjectsAllowed=false;c.Settings.IsWebMessageEnabled=false;c.Settings.AreDevToolsEnabled=false;
-                c.NavigationCompleted+=(_,e)=>{episodeDocumentReady=e.IsSuccess;if(!e.IsSuccess)Log("episode.navigation."+e.WebErrorStatus);};
-                c.NavigationStarting+=(_,e)=>{episodeDocumentReady=false;episodeAccess=false;if(!(episodeGoogle?Policy.Google(e.Uri):Policy.Allowed(e.Uri)&&Policy.Site(e.Uri)==episodeSource))e.Cancel=true;};
+                c.NavigationCompleted+=(_,e)=>{if(e.NavigationId!=episodeNavigationId)return;episodeDocumentReady=e.IsSuccess;if(!e.IsSuccess)Log("episode.navigation."+e.WebErrorStatus);};
+                c.NavigationStarting+=(_,e)=>{episodeNavigationId=e.NavigationId;episodeDocumentReady=false;episodeAccess=false;if(!(episodeGoogle?Policy.Google(e.Uri):Policy.Allowed(e.Uri)&&Policy.Site(e.Uri)==episodeSource))e.Cancel=true;};
                 c.NewWindowRequested+=(_,e)=>e.Handled=true;c.DownloadStarting+=(_,e)=>e.Cancel=true;c.PermissionRequested+=(_,e)=>e.State=CoreWebView2PermissionState.Deny;
                 episodeTimer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(1)};episodeTimer.Tick+=async(_,_)=>await InspectEpisode();
                 if(smoke)ConfigureEpisodeFixtures(c);
