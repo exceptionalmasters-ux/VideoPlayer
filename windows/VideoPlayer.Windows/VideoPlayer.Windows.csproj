@@ -5,7 +5,7 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.3.3</Version>
+    <Version>0.3.4</Version>
     <AssemblyName>VideoPlayer-Windows</AssemblyName>
     <ApplicationIcon Condition="Exists('app.ico')">app.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <EmbeddedResource Include="desktop-fit.js" />
+    <EmbeddedResource Include="episode-events.js" />
     <EmbeddedResource Include="../../app/src/main/assets/*.js" Link="Scripts/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

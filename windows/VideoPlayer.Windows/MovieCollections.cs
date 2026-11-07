@@ -52,6 +52,7 @@ public sealed class MovieCollections
     public void Metadata(MovieCard card)
     {
         var old=Find(card.url); if (old==null) return;
+        if(EpisodePlan.Parse(old.Title)!=null&&EpisodePlan.Parse(card.title)==null)card=card with {title=old.Title};
         var item=Merge(card,old.Opened); Update(history,item); Update(favorites,item); Save();
     }
     public void Progress(string url,double position,double duration)

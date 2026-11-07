@@ -45,3 +45,11 @@ Check(EpisodePlan.Parse("Ronin 1998")==null,"Movie has no episode plan");
 var resumeFile=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
 try {var library=new MovieCollections(resumeFile);var movie=new MovieCard("Film","https://freedisc.pl/u,f-8307530,title","");library.Opened(movie);library.Progress(movie.url,123,7200);library.Opened(movie with {url="https://freedisc.pl/embed/video/8307530?match=1"});var reload=new MovieCollections(resumeFile);Check(reload.Find(movie.url)?.Position==123,"Resume persists across reopen and embed URL");library.Progress(movie.url,double.NaN,7200);Check(library.Find(movie.url)?.Position==123,"Invalid progress rejected");}finally{File.Delete(resumeFile);}
 Console.WriteLine("Windows embed, Google, episodes and resume: all checks passed.");
+Check(EpisodePlan.Parse("Serial_Name_S01.E01_1080p")?.Query=="Serial Name S01E01","Android parity: underscored dotted episode names");
+Check(EpisodePlan.Parse("Serial s1-e02 PL")?.Episode==2,"Separated episode marker");
+Check(EpisodePlan.Parse("Serial S01E01 S01E02")==null,"Ambiguous episode pack rejected");
+Check(EpisodePlan.Parse("Zażółć S01E01")?.Next().Matches("Zazolc.S01E02.PL")==true,"Diacritics and separators match Android");
+Check(EpisodePlan.Resolve("Freedisc","","https://freedisc.pl/user,f-123,serial-name-s01e01-mp4")?.Query=="serial name S01E01","Episode recovered from file slug");
+var metadataFile=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
+try{var metadata=new MovieCollections(metadataFile);var serial=new MovieCard("Serial_Name_S01E01","https://vider.info/vid/+fserial","");metadata.Opened(serial);metadata.Metadata(serial with {title="Odtwarzacz"});Check(metadata.Find(serial.url)?.Title==serial.title,"Generic page title cannot erase episode identity");}finally{File.Delete(metadataFile);}
+Console.WriteLine("Episode parsing, identity preservation and slug recovery: all checks passed.");

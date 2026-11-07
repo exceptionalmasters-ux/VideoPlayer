@@ -401,7 +401,7 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog { FileName = "VideoPlayer-raport.txt", Filter = "Raport tekstowy|*.txt" };
         if (dialog.ShowDialog(this) != true) return;
-        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.3", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
+        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.4", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
         catch (IOException) { Status.Text = "Nie udało się zapisać raportu w wybranym miejscu."; }
     }
     private void WindowClosing(object? sender, CancelEventArgs e) { closed = true; ++epoch; timer.Stop(); episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeBrowser?.Dispose(); Browser.Dispose(); }
@@ -491,6 +491,7 @@ public partial class MainWindow : Window
         int clickCount=log.Count(l=>l.Contains("media.original_play_click"));
         using(var rejected=JsonDocument.Parse("{\"id\":\"unsolicited\",\"x\":0.5,\"y\":0.5}"))await TrustedPlayTap(embedRoot,rejected.RootElement);
         if(log.Count(l=>l.Contains("media.original_play_click"))!=clickCount)throw new Exception("Unsolicited click was accepted");
+        await SmokeEpisodes();
         const string googleFixture="https://www.google.com/search?hl=pl&q=smoke";
         Browser.CoreWebView2.AddWebResourceRequestedFilter(googleFixture,CoreWebView2WebResourceContext.Document);
         Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{if(args.Request.Uri==googleFixture)args.Response=Browser.CoreWebView2.Environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<!doctype html><a href='https://freedisc.pl/embed/video/8307530?match=1'><h3>Ronin 1998</h3></a><a href='https://evil.test/movie'><h3>External</h3></a>")),200,"OK","Content-Type: text/html; charset=utf-8");};
@@ -500,7 +501,7 @@ public partial class MainWindow : Window
         Browser.CoreWebView2.NavigationCompleted+=googleHandler;Browser.CoreWebView2.Navigate(googleFixture);await googleComplete.Task.WaitAsync(TimeSpan.FromSeconds(15));Browser.CoreWebView2.NavigationCompleted-=googleHandler;
         await ReadGoogle(epoch);
         if(searchCards.Count!=1||!searchCards[0].url.EndsWith("?match=1")||Cards.Children.Count!=1)throw new Exception("Scoped Google embed tiles failed");
-        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, trusted cross-origin original Play click, Freedisc delayed-src native frame fit, outer/inner viewport fill/resize/aspect ratio, unsolicited-click rejection, scoped Google embed tiles.");
+        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, trusted cross-origin original Play click, Freedisc delayed-src native frame fit, outer/inner viewport fill/resize/aspect ratio, unsolicited-click rejection, episode prefetch/countdown/cards/no-match/verification/error/unrecognized UI, scoped Google embed tiles.");
         Application.Current.Shutdown(0);
     }
 }
