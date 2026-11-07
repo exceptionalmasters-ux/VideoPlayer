@@ -28,7 +28,7 @@ public partial class MainWindow
         window.chrome.webview.addEventListener('message',function(e){if(window.vpPlayback.onmessage)window.vpPlayback.onmessage({data:JSON.stringify(e.data)})});
         document.addEventListener('keydown',function(e){if(e.defaultPrevented||e.ctrlKey||e.altKey||e.metaKey||e.repeat)return;const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)))return;if(!document.querySelector('video,.jwplayer,[data-vp-player]'))return;const a=e.code==='Space'||e.code==='Enter'?'toggle':e.code==='ArrowLeft'?'back':e.code==='ArrowRight'?'forward':null;if(a){e.preventDefault();window.chrome.webview.postMessage(JSON.stringify({event:'key',page:location.href,action:a}))}},true);
         """;
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("frame-fit.js")+"\n"+Script("tv-play-tap.js")+"\n"+Script("tv-media.js")+"\n"+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n"+Script("ad-diagnostics.js")+"\n}");
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("desktop-fit.js")+"\n"+Script("frame-fit.js")+"\n"+Script("tv-play-tap.js")+"\n"+Script("tv-media.js")+"\n"+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n"+Script("ad-diagnostics.js")+"\n}");
     }
     private void SafeMessage(CoreWebView2WebMessageReceivedEventArgs e,Action<string> reply)
     {try{PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),reply);}catch(Exception error){Log("bridge."+error.GetType().Name);}}
