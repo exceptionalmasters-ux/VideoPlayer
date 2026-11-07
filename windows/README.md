@@ -1,4 +1,4 @@
-# VideoPlayer dla Windows — 0.3.3
+# VideoPlayer dla Windows — 0.3.4
 
 Aplikacja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
@@ -60,3 +60,9 @@ Wewnętrzny odtwarzacz w ramce wypełnia całe okno i dopasowuje się przy zmian
 ## Poprawka 0.3.3
 
 Dopasowanie Freedisc jest przekazywane bezpośrednio do wykrytego odtwarzacza przez kanał WebView2. Obejmuje to ramki ładowane później, bez adresu w atrybucie `src`, które mogły ominąć poprzednie dopasowanie. Zarówno zewnętrzna ramka, jak i wewnętrzny odtwarzacz wypełniają okno. Stan jest przywracany po zmianie rozmiaru i wymianie elementu odtwarzacza; wybranie Cała strona wyłącza dopasowanie. Raport zawiera wymiary odtwarzacza i okna. Test Windows używa strony Freedisc z ramką z innej domeny, nawigowaną skryptem bez `src`, i sprawdza oba poziomy dopasowania oraz zachowanie oryginalnego Play.
+
+## Poprawka 0.3.4
+
+Panel kolejnego odcinka pokazuje zawsze wynik obsługi końcówki filmu: znalezione kafelki, potwierdzony brak odcinka, oczekiwanie na ręczne potwierdzenie, błąd wyszukiwania albo informację o nierozpoznanym numerze. Rozpoznawanie nazw z podkreśleniami, kropkami i polskimi znakami odpowiada Androidowi. Ogólny tytuł strony nie usuwa rozpoznanego numeru odcinka; dodatkowym źródłem jest tytuł oryginalnego odtwarzacza i nazwa pliku w linku. Oprócz odczytu postępu obsługiwany jest sygnał zakończenia z oryginalnego JW Playera. Zamknięty panel nie otwiera się ponownie przy każdym odczycie czasu. Wpisanie kodu przywraca kafelki automatycznie po zakończeniu weryfikacji.
+
+Test Windows sprawdza próg 40/10 sekund, prawdziwe wyniki wyszukiwania na kontrolowanej stronie, przejście do kolejnego sezonu i komunikat braku, oczekiwanie i wznowienie po weryfikacji, błąd wyszukiwania, nierozpoznany tytuł, widoczność panelu i zdarzenie końca odtwarzacza przekazane przez WebView2.
