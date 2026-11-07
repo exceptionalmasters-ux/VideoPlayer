@@ -60,6 +60,13 @@ public partial class MainWindow
         await embeddedFrame.ExecuteScriptAsync("window.smokePlayer.getDuration=()=>100;window.smokePlayer.events.complete();");
         await EpisodeUntil(()=>episodeStatus==EpisodeStatus.NoMatch,"Player complete event did not display an episode outcome");
         if(episodeWindow?.IsVisible!=true)throw new Exception("Player complete event produced no visible panel");
+        EpisodeCase("empty");
+        await embeddedFrame.ExecuteScriptAsync("window.smokePlayer.position=7195;window.smokePlayer.getDuration=()=>7200;window.smokePlayer.events.time({position:7195,duration:7200});window.__vpFlushProgress();");
+        await EpisodeUntil(()=>episodeStatus==EpisodeStatus.NoMatch,"Nested player near-end clock did not produce suggestions");
+        if(episodeWindow?.IsVisible!=true||episodeClockAt==default)throw new Exception("Nested player clock did not show native panel");
+        EpisodeCase("empty");OpenEpisodePanel();
+        await EpisodeUntil(()=>episodeStatus==EpisodeStatus.NoMatch,"Manual episode panel did not work without a playback clock");
+        if(episodeWindow?.IsVisible!=true)throw new Exception("Manual episode panel is invisible");
         episodeOffer=false;episodeTimer?.Stop();var panel=episodeWindow;episodeWindow=null;panel?.Close();ResetEpisodeState();
     }
 }

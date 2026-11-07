@@ -23,12 +23,13 @@ public partial class MainWindow
     private Task? episodeStartTask;
     private void ResetEpisodeState()
     {
+        episodePosition=episodeDuration=0;episodeClockAt=default;
         ++episodeGeneration;episodeStatus=EpisodeStatus.NotStarted;episodeCurrent=null;nextEpisode=null;
         episodeOriginalTitle=currentMovie?.title??"";episodeOffer=false;episodeDismissed=false;episodeDone=false;episodeAccess=false;episodeFallback=false;episodeCards=[];
     }
     private void ConsiderEpisode(double position,double duration,bool ended=false)
     {
-        if(!double.IsFinite(position)||!double.IsFinite(duration)||duration<=0||duration>86400||position<0||position>duration+2)return;
+        if(!ended&&(!double.IsFinite(position)||!double.IsFinite(duration)||duration<=0||duration>86400||position<0||position>duration+2))return;
         var remaining=ended?0:duration-position;
         if(episodeStatus==EpisodeStatus.NotStarted&&remaining<=40)
         {
@@ -155,6 +156,7 @@ public partial class MainWindow
     {
         var panel=new StackPanel{Margin=new Thickness(12)};
         panel.Children.Add(new TextBlock{Text=nextEpisode==null?"Koniec filmu":"Następny odcinek · "+nextEpisode.Query,FontSize=16,Foreground=Brushes.White});
+        panel.Children.Add(new TextBlock{Text=EpisodeClockText(),TextWrapping=TextWrapping.Wrap,Foreground=Brushes.LightGray,Margin=new Thickness(0,6,0,0)});
         panel.Children.Add(new TextBlock{Text=EpisodeMessage(),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,8),Foreground=Brushes.White});
         if(episodeCards.Count>0)
         {
@@ -181,8 +183,10 @@ public partial class MainWindow
     private void ShowEpisodeOffer()
     {
         if(episodeWindow!=null||!episodeOffer||episodeDismissed||closed)return;
-        episodeWindow=new Window{Owner=this,Title="Następny odcinek",Content=EpisodePanel(),Width=Math.Min(1040,ActualWidth-40),SizeToContent=SizeToContent.Height,WindowStyle=WindowStyle.ToolWindow,ResizeMode=ResizeMode.NoResize,ShowInTaskbar=false,ShowActivated=false,Background=new SolidColorBrush(Color.FromRgb(20,39,49)),Foreground=Brushes.White,WindowStartupLocation=WindowStartupLocation.CenterOwner};
+        episodeWindow=new Window{Owner=this,Title="Następny odcinek",Content=EpisodePanel(),Width=Math.Min(1040,ActualWidth-40),SizeToContent=SizeToContent.Height,WindowStyle=WindowStyle.ToolWindow,ResizeMode=ResizeMode.NoResize,ShowInTaskbar=false,ShowActivated=false,Topmost=IsActive,Background=new SolidColorBrush(Color.FromRgb(20,39,49)),Foreground=Brushes.White,WindowStartupLocation=WindowStartupLocation.CenterOwner};
         var window=episodeWindow;window.Closed+=(_,_)=>{if(episodeWindow==window){episodeWindow=null;episodeDismissed=true;episodeOffer=false;}};
+        EventHandler? deactivate=null;deactivate=(_,_)=>Dispatcher.BeginInvoke(new Action(()=>{if(window.IsVisible&&!window.IsActive&&!IsActive)window.Topmost=false;}));
+        Deactivated+=deactivate;window.Closed+=(_,_)=>Deactivated-=deactivate;
         window.Show();window.Left=Left+(ActualWidth-window.ActualWidth)/2;window.Top=Top+Math.Max(0,ActualHeight-window.ActualHeight-30);
         Log("episode.offer."+episodeStatus);
     }

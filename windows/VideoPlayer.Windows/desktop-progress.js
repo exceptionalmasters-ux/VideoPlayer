@@ -3,7 +3,7 @@
   if(window.__vpFlushProgress||!window.vpPlayback)return;
   const bridge=window.vpPlayback;
   let player=null,video=null,token='',saved=null,restoring=false,ad=false,checkpoint=null;
-  let sentAt=0,helloAt=0,seekAt=0,attempts=0,failed=false,lastDuration=0,completed=false;
+  let clockAt=0,sentAt=0,helloAt=0,seekAt=0,attempts=0,failed=false,lastDuration=0,completed=false;
   function send(event,extra){bridge.postMessage(JSON.stringify(Object.assign({event,page:location.href,token},extra)));}
   function adActive(){if(ad||document.querySelector('.jwplayer.jw-flag-ads,.jwplayer.jw-flag-admode'))return true;try{const s=player&&player.getAdState&&String(player.getAdState()).toLowerCase();return ['adplaying','adpaused','adloading','playing','paused','loading'].includes(s);}catch(_){return false;}}
   function valid(position,duration){return Number.isFinite(position)&&Number.isFinite(duration)&&duration>0&&duration<=86400&&position>=0&&position<=duration+2;}
@@ -25,6 +25,7 @@
   function record(position,d,ended){
     if(!token||adActive()||!valid(position,d))return;
     lastDuration=d;
+    if(ended||Date.now()-clockAt>=2000){clockAt=Date.now();send('episode-clock',{position,duration:d,ended:!!ended});}
     if(restore(position,d))return;
     checkpoint={position:Math.floor(ended?d:position),duration:Math.floor(d),ended:!!ended};
     if(ended||Date.now()-sentAt>=2000)flush();

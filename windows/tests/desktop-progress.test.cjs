@@ -37,3 +37,7 @@ test('completed content is saved as ended, while ad completion cannot finish con
  const s=setup();s.reply({token:'t',position:0,duration:0});s.player.position=100;s.player.emit('adStarted');s.player.emit('complete');assert.ok(!s.progress().some(p=>p.ended));
  s.player.emit('adComplete');s.player.position=7200;s.player.emit('complete');assert.equal(s.progress().at(-1).ended,true);assert.equal(s.progress().at(-1).position,7200);
 });
+test('episode clock continues while bookmark restoration is waiting',()=>{
+ const s=setup();s.reply({token:'t',position:7000,duration:7200});s.player.position=7195;s.tick();
+ assert.equal(s.progress().length,0);assert.ok(s.messages.some(m=>m.event==='episode-clock'&&m.position===7195&&m.duration===7200));
+});

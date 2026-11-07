@@ -17,7 +17,7 @@ public partial class MainWindow
     {
         if(!double.IsFinite(position)||!double.IsFinite(duration)||duration<=0||duration>86400||position<0||position>duration+2)return false;
         if(progressEpoch!=epoch){progressPage="";progressPriority=-1;progressEpoch=epoch;}
-        int priority=new Uri(page).AbsolutePath.StartsWith("/embed",StringComparison.Ordinal)?3:1;
+        int priority=PlayerPriority(page);
         if(page!=progressPage&&priority<progressPriority)return false;
         if(page!=progressPage&&priority==progressPriority&&progressPage.Length>0)return false;
         progressPage=page;progressPriority=priority;

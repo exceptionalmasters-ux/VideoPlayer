@@ -9,7 +9,7 @@
     if(!origins.includes(e.origin)||!e.data)return;
     if(e.data.type==='vp-desktop-frame-ready'){
       try{const u=new URL(e.data.page);if(u.origin!==e.origin||!/^\/embed(?:\/|,)/.test(u.pathname))return;}catch(_){return;}
-      for(const frame of document.querySelectorAll('iframe'))if(frame.contentWindow===e.source){frame.__vpDesktopFramePage=e.data.page;frame.setAttribute('data-vp-win-frame','');fit();break;}
+      for(const frame of document.querySelectorAll('iframe'))if(frame.contentWindow===e.source){frame.__vpDesktopFramePage=e.data.page;frame.setAttribute('data-vp-win-frame','');fit();if(intent&&window.parent!==window&&parentOrigin)window.parent.postMessage({type:'vp-desktop-frame-ready',page:location.href},parentOrigin);break;}
       return;
     }
     // The shared relay uses iframe.src; a script-navigated Freedisc frame may have no src attribute.
