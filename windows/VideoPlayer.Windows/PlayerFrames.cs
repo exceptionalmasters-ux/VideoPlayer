@@ -15,7 +15,8 @@ public partial class MainWindow
         if(depth>12)return;
         if(trackedFrames.TryGetValue(frame,out var old)){if(depth>old.Depth){old.Depth=depth;old.Parent=parent;}return;}
         var info=new PlayerFrame(frame,parent,depth);trackedFrames[frame]=info;Log("frame.created.depth."+depth);
-        frame.FrameCreated+=(_,e)=>RegisterPlayerFrame(e.Frame,()=>info.Page,info.Depth+1);
+        try{frame.FrameCreated+=(_,e)=>RegisterPlayerFrame(e.Frame,()=>info.Page,info.Depth+1);}
+        catch(Exception error){Log("frame.child_tracking_unsupported."+error.GetType().Name);}
         frame.NavigationStarting+=(_,e)=>info.Page=e.Uri;
         frame.DOMContentLoaded+=(_,_)=>SendFrameLayout(info,filmView);
         frame.NavigationCompleted+=(_,e)=>{Log("frame.navigation.depth."+depth+"."+(e.IsSuccess?"complete":e.WebErrorStatus.ToString()));if(e.IsSuccess)SendFrameLayout(info,filmView);};

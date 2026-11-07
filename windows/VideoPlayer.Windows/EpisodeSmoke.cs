@@ -41,6 +41,9 @@ public partial class MainWindow
         if(episodeWindow!=null||episodeCards.Count!=1)throw new Exception("Episode tiles appeared too early or are missing");
         ConsiderEpisode(89,100);if(episodeWindow!=null)throw new Exception("Episode UI appeared before 10 seconds");
         ConsiderEpisode(90,100);if(episodeWindow?.IsVisible!=true)throw new Exception("Episode tiles not visible above movie");
+        var ownerStart=PointToScreen(new Point(0,0));var ownerEnd=PointToScreen(new Point(ActualWidth,ActualHeight));
+        var panelStart=episodeWindow.PointToScreen(new Point(0,0));var panelEnd=episodeWindow.PointToScreen(new Point(episodeWindow.ActualWidth,episodeWindow.ActualHeight));
+        if(panelStart.X<ownerStart.X-2||panelStart.Y<ownerStart.Y-2||panelEnd.X>ownerEnd.X+2||panelEnd.Y>ownerEnd.Y+2)throw new Exception("Episode panel outside the visible movie window");
         episodeWindow.Close();ConsiderEpisode(95,100);if(episodeWindow!=null)throw new Exception("Dismissed episode offer reopened");
         EpisodeCase("empty");ConsiderEpisode(100,100,true);if(episodeStartTask!=null)await episodeStartTask;
         await EpisodeUntil(()=>episodeStatus==EpisodeStatus.NoMatch,"Explicit no-episode result missing");

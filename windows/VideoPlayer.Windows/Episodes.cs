@@ -187,7 +187,7 @@ public partial class MainWindow
         var window=episodeWindow;window.Closed+=(_,_)=>{if(episodeWindow==window){episodeWindow=null;episodeDismissed=true;episodeOffer=false;}};
         EventHandler? deactivate=null;deactivate=(_,_)=>Dispatcher.BeginInvoke(new Action(()=>{if(window.IsVisible&&!window.IsActive&&!IsActive)window.Topmost=false;}));
         Deactivated+=deactivate;window.Closed+=(_,_)=>Deactivated-=deactivate;
-        window.Show();window.Left=Left+(ActualWidth-window.ActualWidth)/2;window.Top=Top+Math.Max(0,ActualHeight-window.ActualHeight-30);
+        window.Show();
         Log("episode.offer."+episodeStatus);
     }
     private void OpenEpisodeVerification()

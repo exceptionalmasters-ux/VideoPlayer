@@ -20,6 +20,7 @@ public partial class MainWindow
     private string EpisodeClockText()=>episodeClockAt==default?"Nie odebrano jeszcze czasu filmu. Panel można otworzyć ręcznie klawiszem N.":"Odczyt filmu: "+TimeSpan.FromSeconds(Math.Max(0,episodePosition)).ToString(@"hh\:mm\:ss")+" / "+TimeSpan.FromSeconds(Math.Max(0,episodeDuration)).ToString(@"hh\:mm\:ss");
     private IEnumerable<string> RuntimeSnapshot()
     {
+        yield return "runtime.webview="+Browser.CoreWebView2.Environment.BrowserVersionString;
         yield return "runtime.mode="+mode;
         yield return "runtime.player_endpoints="+endpoints.Count;
         yield return "runtime.frame_depths="+string.Join(',',playerDepths.Values.OrderBy(x=>x));
