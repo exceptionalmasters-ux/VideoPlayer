@@ -1,12 +1,12 @@
-# VideoPlayer dla Windows — 0.2.0
+# VideoPlayer dla Windows — 0.3.0
 
-Pierwsza wersja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
+Aplikacja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
 ## Uruchomienie
 
 Uruchom `VideoPlayer-Windows.exe`. Pakiet jest samodzielny: nie wymaga osobnej instalacji .NET. Wymaga Microsoft Edge WebView2 Runtime (Evergreen), zwykle obecnego na Windows 10/11. Jeśli go brakuje, pobierz go z https://developer.microsoft.com/microsoft-edge/webview2/.
 
-Wybierz Vider lub Freedisc, wpisz tytuł i naciśnij Enter / Szukaj. Kliknięcie miniaturki otwiera oryginalną stronę filmu w aplikacji. Możesz również wkleić link i użyć Otwórz link. Po wykryciu odtwarzacza aplikacja automatycznie przechodzi do widoku filmu i pełnego ekranu. Odtwarzanie uruchamia użytkownik w oryginalnym playerze.
+Wybierz Vider lub Freedisc, wpisz tytuł i naciśnij Enter / Szukaj. Kliknięcie miniaturki otwiera oryginalną stronę filmu w aplikacji. Możesz również wkleić link i użyć Otwórz link. Po wykryciu odtwarzacza aplikacja automatycznie przechodzi do widoku filmu i pełnego ekranu. Aplikacja próbuje uruchomić oryginalny odtwarzacz automatycznie; jeśli serwis wymaga interakcji, użyj przycisku ▶ / Ⅱ lub kliknij Play w filmie.
 
 - **Esc**: wyjście z pełnego ekranu i pokazanie przycisków. Widok filmu pozostaje aktywny.
 - **F11**: przełączanie pełnego ekranu.

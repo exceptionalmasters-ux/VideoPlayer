@@ -1,0 +1,57 @@
+name: Publish Windows download
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-windows.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: publish-windows-0.3.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check tested source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/$GH_REPO/actions/runs/42373269491 --jq '.conclusion')" = success
+          test "$(gh api repos/$GH_REPO/actions/runs/42373269491 --jq '.head_sha')" = 1f3aefee5decace2e779c5b033a4ddbf220c3801
+      - uses: actions/download-artifact@v4
+        with:
+          name: VideoPlayer-Windows-x64
+          run-id: 42373269491
+          github-token: ${{ github.token }}
+          path: verified
+      - name: Publish verified Windows EXE
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.0-x64.exe
+          echo '64d067030557da672cb607cd9bc60acc3310ba37e0c4483099a934f6345bc8e3  VideoPlayer-Windows-0.3.0-x64.exe' > SHA256-Windows-0.3.0.txt
+          sha256sum -c SHA256-Windows-0.3.0.txt
+          cat > release-notes.txt <<'NOTES'
+          VideoPlayer 0.3.0 dla Windows 10/11 x64.
+          Wyszukiwanie Google w aplikacji jako awaryjne źródło kafelków, poprawne ponawianie wyszukiwania i linki embed Freedisc.
+          Historia i ulubione jako kafelki, zapamiętywanie pozycji, automatyczny widok filmu na pełnym ekranie i próba autostartu.
+          Spacja / Enter: Play/Pauza; lewo/prawo: 10 sekund; F11: pełny ekran; Esc: przyciski.
+          Kolejny odcinek: wyszukiwanie 40 sekund przed końcem, propozycje 10 sekund przed końcem; przy potwierdzonym braku odcinka pierwszy odcinek następnego sezonu.
+          CAPTCHA i zgody pozostają do ręcznego potwierdzenia. Reklamy oryginalnego odtwarzacza pozostają aktywne.
+          Samodzielny EXE; wymaga Microsoft Edge WebView2 Runtime. Lokalne kolekcje Windows nie synchronizują się z Androidem.
+          Testy Windows/WPF/WebView2 oraz 44 testy wspólnych skryptów przeszły na kontrolowanych stronach; dostępność serwisów wymaga sprawdzenia przez użytkownika.
+          Kod aplikacji: 1f3aefee5decace2e779c5b033a4ddbf220c3801; zweryfikowany build: 42373269491.
+          NOTES
+          if gh release view windows-v0.3.0 >/dev/null 2>&1; then
+            gh release download windows-v0.3.0 --pattern VideoPlayer-Windows-0.3.0-x64.exe --output existing.exe
+            echo '64d067030557da672cb607cd9bc60acc3310ba37e0c4483099a934f6345bc8e3  existing.exe' | sha256sum -c -
+          else
+            gh release create windows-v0.3.0 VideoPlayer-Windows-0.3.0-x64.exe SHA256-Windows-0.3.0.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.0 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
+          fi
