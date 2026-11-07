@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-windows-0.3.4
+  group: publish-windows-0.3.5
   cancel-in-progress: false
 jobs:
   publish:
@@ -21,12 +21,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          test "$(gh api repos/$GH_REPO/actions/runs/42415449324 --jq '.conclusion')" = success
-          test "$(gh api repos/$GH_REPO/actions/runs/42415449324 --jq '.head_sha')" = 3fecf9867e24603a86d5abdbe5d19d8c98d6e4b2
+          test "$(gh api repos/$GH_REPO/actions/runs/42417313209 --jq '.conclusion')" = success
+          test "$(gh api repos/$GH_REPO/actions/runs/42417313209 --jq '.head_sha')" = 56a3c5d2c7e48f4225c3f59445b13b8c7780dbe8
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-Windows-x64
-          run-id: 42415449324
+          run-id: 42417313209
           github-token: ${{ github.token }}
           path: verified
       - name: Publish verified Windows EXE
@@ -35,11 +35,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.4-x64.exe
-          echo 'e5526478c200bd31e167064361d8d09e64f638fd14185ca461174b25e4fd6c1c  VideoPlayer-Windows-0.3.4-x64.exe' > SHA256-Windows-0.3.4.txt
-          sha256sum -c SHA256-Windows-0.3.4.txt
+          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.5-x64.exe
+          echo '86c187f4f88d38753f6c24b8ab3baeb97a69a293c1dd3eccbb0718bd9b0d16fe  VideoPlayer-Windows-0.3.5-x64.exe' > SHA256-Windows-0.3.5.txt
+          sha256sum -c SHA256-Windows-0.3.5.txt
           cat > release-notes.txt <<'NOTES'
-          VideoPlayer 0.3.4 dla Windows 10/11 x64.
+          VideoPlayer 0.3.5 dla Windows 10/11 x64.
+          Poprawione wznawianie z historii: końcowy zapis przed wyjściem, pauzą i zamknięciem, przewinięcie po gotowości playera i ochrona punktu przed zerem przy ładowaniu.
+          Historia pokazuje godzinę wznowienia. Film przerwany w ostatnich 10 sekundach również wznawia się; zakończony startuje od początku.
+          Test WPF/WebView2 przerywa film, otwiera historię, ponownie uruchamia kafelek i sprawdza rzeczywistą pozycję playera. Testy obejmują także reklamy, opóźnione przewinięcie i trwałość po restarcie.
           Poprawione propozycje kolejnego odcinka: widoczne kafelki, komunikat potwierdzonego braku, oczekiwanie na kod, błąd wyszukiwania lub nierozpoznany numer odcinka.
           Rozpoznawanie nazw z podkreśleniami i kropkami, zachowanie tytułu odcinka, obsługa sygnału zakończenia z odtwarzacza.
           Test Windows sprawdza progi 40/10 sekund, kafelki, kolejny sezon i brak wyników, kod i wznowienie, błąd, nierozpoznany tytuł oraz widoczny panel po zdarzeniu końca filmu.
@@ -59,12 +62,12 @@ jobs:
           CAPTCHA i zgody pozostają do ręcznego potwierdzenia. Reklamy oryginalnego odtwarzacza pozostają aktywne.
           Samodzielny EXE; wymaga Microsoft Edge WebView2 Runtime. Lokalne kolekcje Windows nie synchronizują się z Androidem.
           Testy Windows/WPF/WebView2 oraz 44 testy wspólnych skryptów przeszły na kontrolowanych stronach; dostępność serwisów wymaga sprawdzenia przez użytkownika.
-          Kod aplikacji: 3fecf9867e24603a86d5abdbe5d19d8c98d6e4b2; zweryfikowany build: 42415449324.
+          Kod aplikacji: 56a3c5d2c7e48f4225c3f59445b13b8c7780dbe8; zweryfikowany build: 42417313209.
           NOTES
-          if gh release view windows-v0.3.4 >/dev/null 2>&1; then
-            gh release download windows-v0.3.4 --pattern VideoPlayer-Windows-0.3.4-x64.exe --output existing.exe
-            echo 'e5526478c200bd31e167064361d8d09e64f638fd14185ca461174b25e4fd6c1c  existing.exe' | sha256sum -c -
+          if gh release view windows-v0.3.5 >/dev/null 2>&1; then
+            gh release download windows-v0.3.5 --pattern VideoPlayer-Windows-0.3.5-x64.exe --output existing.exe
+            echo '86c187f4f88d38753f6c24b8ab3baeb97a69a293c1dd3eccbb0718bd9b0d16fe  existing.exe' | sha256sum -c -
           else
-            gh release create windows-v0.3.4 VideoPlayer-Windows-0.3.4-x64.exe SHA256-Windows-0.3.4.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.4 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
+            gh release create windows-v0.3.5 VideoPlayer-Windows-0.3.5-x64.exe SHA256-Windows-0.3.5.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.5 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
           fi
 

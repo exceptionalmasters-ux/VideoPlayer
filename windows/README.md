@@ -1,4 +1,4 @@
-# VideoPlayer dla Windows — 0.3.4
+# VideoPlayer dla Windows — 0.3.5
 
 Aplikacja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
@@ -66,3 +66,11 @@ Dopasowanie Freedisc jest przekazywane bezpośrednio do wykrytego odtwarzacza pr
 Panel kolejnego odcinka pokazuje zawsze wynik obsługi końcówki filmu: znalezione kafelki, potwierdzony brak odcinka, oczekiwanie na ręczne potwierdzenie, błąd wyszukiwania albo informację o nierozpoznanym numerze. Rozpoznawanie nazw z podkreśleniami, kropkami i polskimi znakami odpowiada Androidowi. Ogólny tytuł strony nie usuwa rozpoznanego numeru odcinka; dodatkowym źródłem jest tytuł oryginalnego odtwarzacza i nazwa pliku w linku. Oprócz odczytu postępu obsługiwany jest sygnał zakończenia z oryginalnego JW Playera. Zamknięty panel nie otwiera się ponownie przy każdym odczycie czasu. Wpisanie kodu przywraca kafelki automatycznie po zakończeniu weryfikacji.
 
 Test Windows sprawdza próg 40/10 sekund, prawdziwe wyniki wyszukiwania na kontrolowanej stronie, przejście do kolejnego sezonu i komunikat braku, oczekiwanie i wznowienie po weryfikacji, błąd wyszukiwania, nierozpoznany tytuł, widoczność panelu i zdarzenie końca odtwarzacza przekazane przez WebView2.
+
+## Poprawka 0.3.5
+
+Wznowienie z historii czeka na gotowość oryginalnego odtwarzacza i potwierdzenie faktycznego przewinięcia. Zapisany punkt nie jest zastępowany zerem podczas ładowania. Zdarzenia JW Playera i kontrolowane próbkowanie czasu uzupełniają się; wymiana elementu wideo podczas reklamy nie resetuje obserwacji treści. Pauza, przejście do historii/wyników, zmiana filmu i zamknięcie aplikacji wywołują ostatni zapis.
+
+Historia pokazuje godzinę wznowienia. Odróżniamy zakończony materiał od przerwanego — również ostatnie 10 sekund można wznowić. Zakończony film uruchamia się od początku. Dane starszych kolekcji są odczytywane bez usuwania historii.
+
+Testy obejmują odroczone przewinięcie po rozpoczęciu odtwarzania, ochronę przed zerem, reklamę ze zmianą elementu wideo, zapis końcowego punktu i trwałość po restarcie. Test WPF/WebView2 przerywa film między zdarzeniami czasu, przechodzi do historii, otwiera ten sam kafelek i sprawdza rzeczywistą pozycję playera oraz zapis po pauzie.
