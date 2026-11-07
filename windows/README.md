@@ -1,4 +1,4 @@
-# VideoPlayer dla Windows — 0.3.2
+# VideoPlayer dla Windows — 0.3.3
 
 Aplikacja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
@@ -56,3 +56,7 @@ Windows aktywuje widoczny oryginalny przycisk Play również wewnątrz ramki odt
 ## Poprawka 0.3.2
 
 Wewnętrzny odtwarzacz w ramce wypełnia całe okno i dopasowuje się przy zmianie rozmiaru oraz przełączaniu pełnego ekranu. Film zachowuje proporcje (`object-fit: contain`); pasy wynikające z formatu obrazu są oczekiwane. Nie wymuszamy nowej kolejności warstw reklam odtwarzacza. Test WPF/WebView2 mierzy położenie i wymiary osadzonego odtwarzacza z nagłówkiem strony i stałą początkową wysokością, także po zmianie rozmiaru okna.
+
+## Poprawka 0.3.3
+
+Dopasowanie Freedisc jest przekazywane bezpośrednio do wykrytego odtwarzacza przez kanał WebView2. Obejmuje to ramki ładowane później, bez adresu w atrybucie `src`, które mogły ominąć poprzednie dopasowanie. Zarówno zewnętrzna ramka, jak i wewnętrzny odtwarzacz wypełniają okno. Stan jest przywracany po zmianie rozmiaru i wymianie elementu odtwarzacza; wybranie Cała strona wyłącza dopasowanie. Raport zawiera wymiary odtwarzacza i okna. Test Windows używa strony Freedisc z ramką z innej domeny, nawigowaną skryptem bez `src`, i sprawdza oba poziomy dopasowania oraz zachowanie oryginalnego Play.
