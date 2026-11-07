@@ -8,7 +8,7 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-windows-0.3.1
+  group: publish-windows-0.3.2
   cancel-in-progress: false
 jobs:
   publish:
@@ -21,12 +21,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          test "$(gh api repos/$GH_REPO/actions/runs/42380857902 --jq '.conclusion')" = success
-          test "$(gh api repos/$GH_REPO/actions/runs/42380857902 --jq '.head_sha')" = 55f6d1f6cfb466246d102ba7230d79110e9484b5
+          test "$(gh api repos/$GH_REPO/actions/runs/42382126710 --jq '.conclusion')" = success
+          test "$(gh api repos/$GH_REPO/actions/runs/42382126710 --jq '.head_sha')" = df865d5f99ad0756ddd8b8741cc68100a96abead
       - uses: actions/download-artifact@v4
         with:
           name: VideoPlayer-Windows-x64
-          run-id: 42380857902
+          run-id: 42382126710
           github-token: ${{ github.token }}
           path: verified
       - name: Publish verified Windows EXE
@@ -35,11 +35,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.1-x64.exe
-          echo '05a11e506b2ccc0bcbebfc27229e948d1a385be15583e930c7e65dfeb1018cc7  VideoPlayer-Windows-0.3.1-x64.exe' > SHA256-Windows-0.3.1.txt
-          sha256sum -c SHA256-Windows-0.3.1.txt
+          cp verified/VideoPlayer-Windows.exe VideoPlayer-Windows-0.3.2-x64.exe
+          echo '9c48ee970d968969f5c49d80e1ef9e74f21fc8f443c26a1418ff451882c4685f  VideoPlayer-Windows-0.3.2-x64.exe' > SHA256-Windows-0.3.2.txt
+          sha256sum -c SHA256-Windows-0.3.2.txt
           cat > release-notes.txt <<'NOTES'
-          VideoPlayer 0.3.1 dla Windows 10/11 x64.
+          VideoPlayer 0.3.2 dla Windows 10/11 x64.
+          Poprawka pełnego ekranu: wewnętrzny odtwarzacz wypełnia całe okno i dopasowuje się po zmianie rozmiaru, bez rozciągania proporcji filmu.
+          Pasek logowania i ocen osadzonej strony jest ukryty w widoku filmu.
+          Test WPF/WebView2 potwierdza rozmiary i położenie odtwarzacza w ramce, także po zmianie rozmiaru okna.
           Poprawka startu filmu: aktywacja oryginalnego przycisku Play również w ramce, bez ukrywania reklam.
           Rozszerzony raport stanów odtwarzacza, ramki i wykonania polecenia startu.
           Test Windows potwierdza uruchomienie odtwarzacza wymagającego zaufanego kliknięcia w ramce innej domeny.
@@ -50,12 +53,12 @@ jobs:
           CAPTCHA i zgody pozostają do ręcznego potwierdzenia. Reklamy oryginalnego odtwarzacza pozostają aktywne.
           Samodzielny EXE; wymaga Microsoft Edge WebView2 Runtime. Lokalne kolekcje Windows nie synchronizują się z Androidem.
           Testy Windows/WPF/WebView2 oraz 44 testy wspólnych skryptów przeszły na kontrolowanych stronach; dostępność serwisów wymaga sprawdzenia przez użytkownika.
-          Kod aplikacji: 55f6d1f6cfb466246d102ba7230d79110e9484b5; zweryfikowany build: 42380857902.
+          Kod aplikacji: df865d5f99ad0756ddd8b8741cc68100a96abead; zweryfikowany build: 42382126710.
           NOTES
-          if gh release view windows-v0.3.1 >/dev/null 2>&1; then
-            gh release download windows-v0.3.1 --pattern VideoPlayer-Windows-0.3.1-x64.exe --output existing.exe
-            echo '05a11e506b2ccc0bcbebfc27229e948d1a385be15583e930c7e65dfeb1018cc7  existing.exe' | sha256sum -c -
+          if gh release view windows-v0.3.2 >/dev/null 2>&1; then
+            gh release download windows-v0.3.2 --pattern VideoPlayer-Windows-0.3.2-x64.exe --output existing.exe
+            echo '9c48ee970d968969f5c49d80e1ef9e74f21fc8f443c26a1418ff451882c4685f  existing.exe' | sha256sum -c -
           else
-            gh release create windows-v0.3.1 VideoPlayer-Windows-0.3.1-x64.exe SHA256-Windows-0.3.1.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.1 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
+            gh release create windows-v0.3.2 VideoPlayer-Windows-0.3.2-x64.exe SHA256-Windows-0.3.2.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.3.2 — Windows PC' --notes-file release-notes.txt --prerelease --latest=false
           fi
 
