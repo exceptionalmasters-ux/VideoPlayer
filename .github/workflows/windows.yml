@@ -26,6 +26,8 @@ jobs:
           node-version: '22'
       - name: Shared browser scripts
         run: node --test tests/browser-scripts.test.cjs
+      - name: Windows progress and resume scripts
+        run: node --test windows/tests/desktop-progress.test.cjs
       - name: URL and presentation policies
         run: dotnet run --project windows/VideoPlayer.Checks -c Release
       - name: Generate application icon
@@ -62,3 +64,4 @@ jobs:
           path: |
             windows/publish/smoke-result.txt
             windows/publish/SHA256.txt
+

@@ -221,13 +221,14 @@ public partial class MainWindow : Window
         }
         finally { busy = false; }
     }
-    private void Search()
+    private async void Search()
     {
         if (!ready) return;
         var text = Query.Text.Trim();
         if (Policy.Movie(text)) { OpenMovie(text); return; }
         if (text.Length is < 1 or > 120) { Status.Text = "Wpisz tytuł (do 120 znaków) albo link do filmu."; return; }
         activeQuery=text; googleSearch=false;
+        await FlushPlayback();
         Browser.CoreWebView2.Stop();
         LeaveFullscreen(); ++epoch; mode = Mode.Search; searching = true; routed = false; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); movieTarget = null; returnPending = false;
         collection="results";ClearCollection.Visibility=Visibility.Collapsed;searchCards=[];
@@ -259,6 +260,8 @@ public partial class MainWindow : Window
             stack.Children.Add(new TextBlock { Text = Policy.Site(movie.url) == Source.Vider ? "VIDER  ·  Otwórz film" : "FREEDISC  ·  Otwórz film", FontSize = 11, Foreground = Brushes.LightSeaGreen, Margin = new Thickness(12,4,12,12) });
             var card = new Button { Content = stack, Padding = new Thickness(0), Margin = new Thickness(6), VerticalContentAlignment = VerticalAlignment.Top, ToolTip = movie.title };
             card.Click += (_, _) => OpenMovie(movie.url,movie);
+            var saved=collections?.Find(movie.url);var resume=MovieCollections.ResumePosition(saved);
+            if(collection=="history"&&resume>0)stack.Children.Add(new TextBlock{Text="Wznów od "+TimeSpan.FromSeconds(resume).ToString(@"hh\:mm\:ss"),Foreground=Brushes.LightSeaGreen,Margin=new Thickness(12,0,12,10)});
             var tile=new StackPanel { Width=250,Margin=new Thickness(2) };tile.Children.Add(card);
             var actions=new WrapPanel();
             var star=new Button { Content=collections?.Favorite(movie.url)==true?"★ Usuń":"☆ Ulubione",Padding=new Thickness(10,7,10,7),FontSize=12 };
@@ -271,9 +274,10 @@ public partial class MainWindow : Window
             tile.Children.Add(actions);Cards.Children.Add(tile);
         }
     }
-    private void OpenMovie(string url,MovieCard? card=null)
+    private async void OpenMovie(string url,MovieCard? card=null)
     {
         if (!ready || !Policy.Movie(url)) { Status.Text = "Wklej prawidłowy link do filmu Vider lub Freedisc."; return; }
+        var sequence=++openSequence;await FlushPlayback();if(sequence!=openSequence||closed)return;
         url=Policy.MovieUrl(url);
         currentMovie=(card??collections?.Find(url)?.Card??new MovieCard("",url,"")) with {url=url};
         ResetPlayback();
@@ -327,10 +331,11 @@ public partial class MainWindow : Window
     private void SearchClick(object sender, RoutedEventArgs e) => Search();
     private void QueryKeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { Search(); e.Handled = true; } }
     private void OpenLinkClick(object sender, RoutedEventArgs e) => OpenMovie(Query.Text.Trim());
-    private void SourceChanged(object sender, SelectionChangedEventArgs e)
+    private async void SourceChanged(object sender, SelectionChangedEventArgs e)
     {
         source = SourcePicker.SelectedIndex == 1 ? Source.Freedisc : Source.Vider;
         if (!ready) return;
+        await FlushPlayback();
         episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeWindow=null;
         ++epoch; mode = Mode.Results; searching = false; movieTarget = null; LeaveFullscreen(); Browser.CoreWebView2.Stop(); Browser.CoreWebView2.Navigate("about:blank");
         Browser.Visibility = Visibility.Hidden; Results.Visibility = Visibility.Visible; PlayerTools.Visibility = Visibility.Collapsed; Cards.Children.Clear(); Welcome.Visibility = Visibility.Visible;collection="results";searchCards=[];ClearCollection.Visibility=Visibility.Collapsed;
@@ -364,8 +369,9 @@ public partial class MainWindow : Window
         Render(list);
         Status.Text=(collection=="history"?"Historia":collection=="favorites"?"Ulubione":"Wyniki")+" · "+list.Count+(list.Count==0?" · lista jest pusta":" · kliknij miniaturkę, aby otworzyć film");
     }
-    private void ShowCollection(string selected)
+    private async void ShowCollection(string selected)
     {
+        await FlushPlayback();
         episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeWindow=null;
         ++epoch; LeaveFullscreen();mode=Mode.Results;searching=false;
         if(ready){Browser.CoreWebView2.Stop();Browser.CoreWebView2.Navigate("about:blank");}
@@ -385,7 +391,7 @@ public partial class MainWindow : Window
         if(currentMovie==null)return;
         if(CollectionAction(()=>collections?.Toggle(currentMovie)))Status.Text=collections?.Favorite(currentMovie.url)==true?"Dodano do ulubionych.":"Usunięto z ulubionych.";
     }
-    private void ReloadClick(object sender, RoutedEventArgs e) { presentation.Navigation(); Browser.Reload(); }
+    private async void ReloadClick(object sender, RoutedEventArgs e) { await FlushPlayback();presentation.Navigation(); Browser.Reload(); }
     private async void FocusClick(object sender, RoutedEventArgs e) { try { await FocusMovie(false, epoch); } catch (Exception error) { Log("focus." + error.GetType().Name); } }
     private async void PageClick(object sender, RoutedEventArgs e)
     {
@@ -397,14 +403,14 @@ public partial class MainWindow : Window
     private void ReturnClick(object sender, RoutedEventArgs e) { if (movieTarget != null) OpenMovie(movieTarget); }
     private void ShowPageClick(object sender, RoutedEventArgs e) { if (ready) ShowBrowser(); }
     private void CheckClick(object sender, RoutedEventArgs e) { if ((googleSearch || searchTarget != null) && mode == Mode.Search) { searching = true; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); Status.Text = "Ponowny odczyt wyników…"; } }
-    private void ReportClick(object sender, RoutedEventArgs e)
+    private async void ReportClick(object sender, RoutedEventArgs e)
     {
+        await FlushPlayback();
         var dialog = new SaveFileDialog { FileName = "VideoPlayer-raport.txt", Filter = "Raport tekstowy|*.txt" };
         if (dialog.ShowDialog(this) != true) return;
-        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.4", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
+        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.5", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
         catch (IOException) { Status.Text = "Nie udało się zapisać raportu w wybranym miejscu."; }
     }
-    private void WindowClosing(object? sender, CancelEventArgs e) { closed = true; ++epoch; timer.Stop(); episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeBrowser?.Dispose(); Browser.Dispose(); }
     private static void WriteSmoke(string text) => File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "smoke-result.txt"), text);
     private async Task SmokeTest()
     {
@@ -453,7 +459,7 @@ public partial class MainWindow : Window
         await Browser.ExecuteScriptAsync("window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){this.state='playing'},pause(){this.state='paused'},seek(p){this.position=p},getPosition(){return this.position||0}};window.jwplayer=()=>window.smokePlayer;");
         var bridgeDeadline=DateTime.UtcNow.AddSeconds(8);
         while(endpoints.Count==0){if(DateTime.UtcNow>bridgeDeadline)throw new Exception("Playback bridge handshake failed");await Task.Delay(100);}
-        await Browser.ExecuteScriptAsync("window.smokePlayer.events.time({position:123,duration:7200})");
+        await Browser.ExecuteScriptAsync("window.smokePlayer.position=123;window.smokePlayer.events.time({position:123,duration:7200})");
         await Task.Delay(300);
         if(collections?.Find(fixtureUrl)?.Position!=123)throw new Exception("Playback progress persistence failed");
         MediaCommand("play");await Task.Delay(200);
@@ -464,7 +470,7 @@ public partial class MainWindow : Window
         const string embedRoot="https://freedisc.pl/smoke,f-12345,film-mp4";
         const string embedFixture="https://stream.freedisc.pl/embed/video/12345";
         var embedHtml="""
-        <!doctype html><html><body style="margin:0"><header id="embed_hover_header" style="height:30px;position:fixed;top:0;z-index:9999">Login and rating</header><div class="jwplayer" id="embedded-player" style="position:relative;width:740px;height:390px;background:#222"><video></video><div class="jw-display-icon-display" role="button" style="position:absolute;left:40%;top:40%;width:120px;height:70px;background:white;color:black" onclick="if(event.isTrusted){window.smokePlayer.state='playing';window.smokePlayer.events.time({position:321,duration:7200})}">Play</div></div><script>window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){},pause(){this.state='paused'},seek(){},getPosition(){return 0}};window.jwplayer=()=>window.smokePlayer;</script></body></html>
+        <!doctype html><html><body style="margin:0"><header id="embed_hover_header" style="height:30px;position:fixed;top:0;z-index:9999">Login and rating</header><div class="jwplayer" id="embedded-player" style="position:relative;width:740px;height:390px;background:#222"><video></video><div class="jw-display-icon-display" role="button" style="position:absolute;left:40%;top:40%;width:120px;height:70px;background:white;color:black" onclick="if(event.isTrusted){window.smokePlayer.state='playing';window.smokePlayer.ready=true;window.smokePlayer.position=321;window.smokePlayer.events.time({position:321,duration:7200})}">Play</div></div><script>window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){},pause(){this.state='paused'},seek(p){this.requested=p;if(this.state==='playing'){this.position=p;this.events.time({position:p,duration:7200})}},getDuration(){return 7200},getPosition(){return this.position||0}};window.jwplayer=()=>window.smokePlayer;Object.defineProperty(document.querySelector('video'),'readyState',{get:()=>window.smokePlayer.ready?1:0});</script></body></html>
         """;
         foreach(var fixture in new[]{embedRoot,embedFixture})Browser.CoreWebView2.AddWebResourceRequestedFilter(fixture,CoreWebView2WebResourceContext.Document);
         Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{
@@ -491,6 +497,8 @@ public partial class MainWindow : Window
         int clickCount=log.Count(l=>l.Contains("media.original_play_click"));
         using(var rejected=JsonDocument.Parse("{\"id\":\"unsolicited\",\"x\":0.5,\"y\":0.5}"))await TrustedPlayTap(embedRoot,rejected.RootElement);
         if(log.Count(l=>l.Contains("media.original_play_click"))!=clickCount)throw new Exception("Unsolicited click was accepted");
+        await SmokeResume(embedRoot,embedFixture,embeddedFrame);
+        embeddedFrame=playbackFrames[embedFixture];
         await SmokeEpisodes(embeddedFrame);
         const string googleFixture="https://www.google.com/search?hl=pl&q=smoke";
         Browser.CoreWebView2.AddWebResourceRequestedFilter(googleFixture,CoreWebView2WebResourceContext.Document);
@@ -501,7 +509,7 @@ public partial class MainWindow : Window
         Browser.CoreWebView2.NavigationCompleted+=googleHandler;Browser.CoreWebView2.Navigate(googleFixture);await googleComplete.Task.WaitAsync(TimeSpan.FromSeconds(15));Browser.CoreWebView2.NavigationCompleted-=googleHandler;
         await ReadGoogle(epoch);
         if(searchCards.Count!=1||!searchCards[0].url.EndsWith("?match=1")||Cards.Children.Count!=1)throw new Exception("Scoped Google embed tiles failed");
-        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, trusted cross-origin original Play click, Freedisc delayed-src native frame fit, outer/inner viewport fill/resize/aspect ratio, unsolicited-click rejection, episode prefetch/countdown/cards/no-match/verification/error/unrecognized UI, scoped Google embed tiles.");
+        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, trusted cross-origin original Play click, Freedisc delayed-src native frame fit, outer/inner viewport fill/resize/aspect ratio, unsolicited-click rejection, history flush/reopen/actual delayed seek/pause save, episode prefetch/countdown/cards/no-match/verification/error/unrecognized UI, scoped Google embed tiles.");
         Application.Current.Shutdown(0);
     }
 }

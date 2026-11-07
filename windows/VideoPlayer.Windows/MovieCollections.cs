@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.IO;
 namespace VideoPlayer.Windows;
-public sealed record SavedMovie(string Url,string Title,string Thumbnail,long Opened,double Position=0,double Duration=0)
+public sealed record SavedMovie(string Url,string Title,string Thumbnail,long Opened,double Position=0,double Duration=0,bool Completed=false)
 {
     [JsonIgnore] public string Key => MovieCollections.Key(Url);
     [JsonIgnore] public MovieCard Card => new(Title,Url,Thumbnail);
@@ -38,7 +38,7 @@ public sealed class MovieCollections
     private SavedMovie Merge(MovieCard card,long time)
     {
         var old=Find(card.url);
-        return Normalize(new(card.url,Descriptive(card.title)?card.title:old?.Title ?? "",Policy.Thumbnail(card.thumbnail)?card.thumbnail:old?.Thumbnail ?? "",time,old?.Position??0,old?.Duration??0));
+        return Normalize(new(card.url,Descriptive(card.title)?card.title:old?.Title ?? "",Policy.Thumbnail(card.thumbnail)?card.thumbnail:old?.Thumbnail ?? "",time,old?.Position??0,old?.Duration??0,old?.Completed??false));
     }
     public IReadOnlyList<SavedMovie> Items(string collection) => (collection=="favorites"?favorites:history).ToArray();
     public SavedMovie? Find(string url) => history.Concat(favorites).FirstOrDefault(i=>i.Key==Key(url));
@@ -55,12 +55,13 @@ public sealed class MovieCollections
         if(EpisodePlan.Parse(old.Title)!=null&&EpisodePlan.Parse(card.title)==null)card=card with {title=old.Title};
         var item=Merge(card,old.Opened); Update(history,item); Update(favorites,item); Save();
     }
-    public void Progress(string url,double position,double duration)
+    public void Progress(string url,double position,double duration,bool ended=false)
     {
         if(!double.IsFinite(position)||!double.IsFinite(duration)||duration<=0||duration>86400||position<0||position>duration+2)return;
         var old=Find(url);if(old==null)return;
-        var item=old with {Position=position,Duration=duration};Update(history,item);Update(favorites,item);Save();
+        var item=old with {Position=position,Duration=duration,Completed=ended};Update(history,item);Update(favorites,item);Save();
     }
+    public static double ResumePosition(SavedMovie? movie) => movie==null||movie.Completed||!double.IsFinite(movie.Position)||movie.Position<0||movie.Duration>0&&movie.Position>=movie.Duration?0:movie.Position;
     private static void Update(List<SavedMovie> list,SavedMovie item) { var n=list.FindIndex(i=>i.Key==item.Key); if(n>=0)list[n]=item; }
     public bool Toggle(MovieCard card)
     {

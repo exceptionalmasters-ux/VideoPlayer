@@ -8,7 +8,7 @@ public partial class MainWindow
     private readonly Dictionary<string,Endpoint> endpoints=[];
     private bool autoStart=true,filmView;
     private Window? episodeWindow;
-    private void ResetPlayback(){endpoints.Clear();playRequests.Clear();verificationActive=false;filmView=false;autoStart=true;episodeOffer=false;nextEpisode=null;episodeTimer?.Stop();episodeBrowser?.CoreWebView2?.Stop();episodeWindow?.Close();episodeWindow=null;nextEpisode=null;ResetEpisodeState();}
+    private void ResetPlayback(){ResetTimeline();endpoints.Clear();playRequests.Clear();verificationActive=false;filmView=false;autoStart=true;episodeOffer=false;nextEpisode=null;episodeTimer?.Stop();episodeBrowser?.CoreWebView2?.Stop();episodeWindow?.Close();episodeWindow=null;nextEpisode=null;ResetEpisodeState();}
     private static bool MediaOrigin(string value)=>Policy.Allowed(value)||Uri.TryCreate(value,UriKind.Absolute,out var u)&&u.Scheme=="https"&&u.Port==443&&u.UserInfo.Length==0&&new[]{"stream.freedisc.pl","stream2.freedisc.pl","ovh.freedisc.pl"}.Contains(u.IdnHost);
     private async Task ConfigurePlayback(CoreWebView2 core)
     {
@@ -18,7 +18,8 @@ public partial class MainWindow
             var frame=args.Frame;
             Log("frame.created");
             frame.NavigationCompleted+=(_,e)=>Log("frame.navigation."+(e.IsSuccess?"complete":e.WebErrorStatus.ToString()));
-            frame.WebMessageReceived+=(_,e)=>SafeMessage(e,frame.PostWebMessageAsJson);
+            frame.WebMessageReceived+=(_,e)=>{playbackFrames[e.Source]=frame;SafeMessage(e,frame.PostWebMessageAsJson);};
+            frame.Destroyed+=(_,_)=>{foreach(var key in playbackFrames.Where(x=>ReferenceEquals(x.Value,frame)).Select(x=>x.Key).ToArray())playbackFrames.Remove(key);};
         };
         var wrapper="""
         if(/^https:\/\/(www\.)?(vider\.(info|pl)|freedisc\.pl)$/.test(location.origin)||['https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl'].includes(location.origin)){
@@ -28,7 +29,7 @@ public partial class MainWindow
         window.chrome.webview.addEventListener('message',function(e){const d=e.data;if(d&&typeof d.desktopFit==='boolean'&&window.__vpSetDesktopFit)window.__vpSetDesktopFit(d.desktopFit,d.parentOrigin);if(d&&d.type==='desktop-layout')return;if(window.vpPlayback.onmessage)window.vpPlayback.onmessage({data:JSON.stringify(d)})});
         document.addEventListener('keydown',function(e){if(e.defaultPrevented||e.ctrlKey||e.altKey||e.metaKey||e.repeat)return;const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)))return;if(!document.querySelector('video,.jwplayer,[data-vp-player]'))return;const a=e.code==='Space'||e.code==='Enter'?'toggle':e.code==='ArrowLeft'?'back':e.code==='ArrowRight'?'forward':null;if(a){e.preventDefault();window.chrome.webview.postMessage(JSON.stringify({event:'key',page:location.href,action:a}))}},true);
         """;
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("desktop-fit.js")+"\n"+Script("frame-fit.js")+"\n"+Script("tv-play-tap.js")+"\n"+Script("tv-media.js")+"\n"+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n"+Script("ad-diagnostics.js")+"\n"+Script("episode-events.js")+"\n}");
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("desktop-fit.js")+"\n"+Script("frame-fit.js")+"\n"+Script("tv-play-tap.js")+"\n"+Script("tv-media.js")+"\n"+Script("original-autostart.js")+"\n"+Script("desktop-progress.js")+"\n"+Script("ad-diagnostics.js")+"\n"+Script("episode-events.js")+"\n}");
     }
     private void SafeMessage(CoreWebView2WebMessageReceivedEventArgs e,Action<string> reply)
     {try{PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),reply);}catch(Exception error){Log("bridge."+error.GetType().Name);}}
@@ -52,10 +53,13 @@ public partial class MainWindow
                 Log("playback.hello",origin);
                 var token=Guid.NewGuid().ToString("N");endpoints[origin]=new(token,epoch,reply);
                 var old=collections?.Find(currentMovie.url);
-                var position=old!=null&&old.Duration-old.Position>10?old.Position:0;
+                var position=MovieCollections.ResumePosition(old);
+                Log("resume.request."+(int)position);
                 reply(JsonSerializer.Serialize(new{token,position,duration=old?.Duration??0,autostart=autoStart&&!smoke,desktopFit=filmView,parentOrigin=new Uri(Browser.CoreWebView2.Source).GetLeftPart(UriPartial.Authority)}));return;
             }
             if(!endpoints.TryGetValue(origin,out var endpoint)||endpoint.Epoch!=epoch||d.GetProperty("token").GetString()!=endpoint.Token)return;
+            if(kind=="flush-result"){if(d.TryGetProperty("requestId",out var id)&&flushRequests.TryGetValue(id.GetString()??"",out var completion))completion.TrySetResult(true);return;}
+            if(kind is "resume-pending" or "resume-applied" or "resume-failed" or "resume-skipped-duration"){Log(kind);return;}
             if(kind is "autoplay-started" or "autoplay-expired" or "autoplay-cancelled"){autoStart=false;Log(kind);return;}
             if(kind=="autoplay-request"&&autoStart&&!smoke&&!verificationActive){Log("autoplay.request");SendMedia(endpoint,"play",false);return;}
             if(kind=="media-command-result"){Log("media.command.handled."+(d.TryGetProperty("handled",out var h)&&h.ValueKind==JsonValueKind.True));return;}
@@ -68,12 +72,16 @@ public partial class MainWindow
             if(kind=="ended")
             {
                 var duration=d.TryGetProperty("duration",out var v)&&v.TryGetDouble(out var n)&&double.IsFinite(n)&&n>0?n:collections?.Find(currentMovie.url)?.Duration??0;
+                if(!AcceptProgress(origin,duration,duration))return;
+                CollectionAction(()=>collections?.Progress(currentMovie.url,duration,duration,true));
                 Log("episode.playback_complete");ConsiderEpisode(duration,duration,true);return;
             }
             if(kind=="progress")
             {
                 var position=d.GetProperty("position").GetDouble();var duration=d.GetProperty("duration").GetDouble();
-                CollectionAction(()=>collections?.Progress(currentMovie.url,position,duration));
+                var endedValue=d.TryGetProperty("ended",out var ev)&&ev.ValueKind==JsonValueKind.True;
+                if(!AcceptProgress(origin,position,duration))return;
+                CollectionAction(()=>collections?.Progress(currentMovie.url,position,duration,endedValue));
                 ConsiderEpisode(position,duration,d.TryGetProperty("ended",out var ended)&&ended.ValueKind==JsonValueKind.True);
             }
         }
@@ -108,8 +116,9 @@ public partial class MainWindow
         if(!ready||Query.Text.Trim().Length is <1 or >120)return;
         activeQuery=Query.Text.Trim();StartGoogle();
     }
-    private void StartGoogle()
+    private async void StartGoogle()
     {
+        await FlushPlayback();
         LeaveFullscreen();++epoch;mode=Mode.Search;googleSearch=true;searching=true;searchTicks=0;searchDeadline=DateTime.UtcNow.AddSeconds(35);
         collection="results";searchCards=[];Cards.Children.Clear();Welcome.Visibility=Visibility.Collapsed;PlayerTools.Visibility=Visibility.Collapsed;
         Browser.CoreWebView2.Stop();Browser.CoreWebView2.Navigate(Policy.GoogleSearch(source,activeQuery));
