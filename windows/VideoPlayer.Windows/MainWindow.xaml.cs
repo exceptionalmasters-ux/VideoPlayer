@@ -105,8 +105,6 @@ public partial class MainWindow : Window
                 command.CustomItemSelected += (_, _) => Dispatcher.InvokeAsync(() => LeaveFullscreen());
                 args.MenuItems.Insert(0, command);
             };
-            var origins = "['https://vider.info','https://www.vider.info','https://vider.pl','https://www.vider.pl','https://freedisc.pl','https://www.freedisc.pl','https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl']";
-            await core.AddScriptToExecuteOnDocumentCreatedAsync("if(" + origins + ".includes(location.origin)){" + Script("frame-fit.js") + "\n" + Script("tv-media.js") + "}");
             PreviewKeyDown += (_, args) =>
             {
                 if (args.Key == Key.F11) { ToggleFullscreen(); args.Handled = true; }
@@ -175,6 +173,7 @@ public partial class MainWindow : Window
             if (!Policy.Allowed(url)) return;
             var stage = await ReadState();
             if (closed || current != epoch) return;
+            verificationActive=stage!="results";
             if (stage != "results")
             {
                 if (mode == Mode.Movie)
@@ -398,7 +397,7 @@ public partial class MainWindow : Window
     {
         var dialog = new SaveFileDialog { FileName = "VideoPlayer-raport.txt", Filter = "Raport tekstowy|*.txt" };
         if (dialog.ShowDialog(this) != true) return;
-        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.0", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
+        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.1", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
         catch (IOException) { Status.Text = "Nie udało się zapisać raportu w wybranym miejscu."; }
     }
     private void WindowClosing(object? sender, CancelEventArgs e) { closed = true; ++epoch; timer.Stop(); episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeBrowser?.Dispose(); Browser.Dispose(); }
@@ -457,6 +456,27 @@ public partial class MainWindow : Window
         if(await Browser.ExecuteScriptAsync("window.smokePlayer.state")!="\"playing\"")throw new Exception("Play command bridge failed");
         MediaCommand("pause");await Task.Delay(200);
         if(await Browser.ExecuteScriptAsync("window.smokePlayer.state")!="\"paused\"")throw new Exception("Pause command bridge failed");
+        // A cross-origin embedded player that starts only after a trusted original-control click.
+        const string embedRoot="https://vider.info/vid/+fembedtest";
+        const string embedFixture="https://freedisc.pl/embed/video/12345";
+        var embedHtml="""
+        <!doctype html><html><body style="margin:0"><div class="jwplayer" id="embedded-player" style="position:fixed;inset:0;background:#222"><video></video><div class="jw-display-icon-display" role="button" style="position:absolute;left:40%;top:40%;width:120px;height:70px;background:white;color:black" onclick="if(event.isTrusted){window.smokePlayer.state='playing';window.smokePlayer.events.time({position:321,duration:7200})}">Play</div></div><script>window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){},pause(){this.state='paused'},seek(){},getPosition(){return 0}};window.jwplayer=()=>window.smokePlayer;</script></body></html>
+        """;
+        foreach(var fixture in new[]{embedRoot,embedFixture})Browser.CoreWebView2.AddWebResourceRequestedFilter(fixture,CoreWebView2WebResourceContext.Document);
+        Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{
+            string? markup=args.Request.Uri==embedRoot?"<!doctype html><div class='video-frame'><iframe src='"+embedFixture+"' style='width:100%;height:500px;border:0'></iframe></div>":args.Request.Uri==embedFixture?embedHtml:null;
+            if(markup!=null)args.Response=Browser.CoreWebView2.Environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(markup)),200,"OK","Content-Type: text/html; charset=utf-8");
+        };
+        OpenMovie(embedRoot);
+        var embedDeadline=DateTime.UtcNow.AddSeconds(15);
+        while(!endpoints.ContainsKey(embedFixture)){if(DateTime.UtcNow>embedDeadline)throw new Exception("Embedded playback handshake failed: "+string.Join(" | ",log));await Task.Delay(100);}
+        await FocusMovie(true,epoch);await Task.Delay(300);
+        MediaCommand("play");
+        while(collections?.Find(embedRoot)?.Position!=321){if(DateTime.UtcNow>embedDeadline)throw new Exception("Trusted embedded Play click failed: "+string.Join(" | ",log));await Task.Delay(100);}
+        // Replayed/unsolicited coordinates must never create a click.
+        int clickCount=log.Count(l=>l.Contains("media.original_play_click"));
+        using(var rejected=JsonDocument.Parse("{\"id\":\"unsolicited\",\"x\":0.5,\"y\":0.5}"))await TrustedPlayTap(embedRoot,rejected.RootElement);
+        if(log.Count(l=>l.Contains("media.original_play_click"))!=clickCount)throw new Exception("Unsolicited click was accepted");
         const string googleFixture="https://www.google.com/search?hl=pl&q=smoke";
         Browser.CoreWebView2.AddWebResourceRequestedFilter(googleFixture,CoreWebView2WebResourceContext.Document);
         Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{if(args.Request.Uri==googleFixture)args.Response=Browser.CoreWebView2.Environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<!doctype html><a href='https://freedisc.pl/embed/video/8307530?match=1'><h3>Ronin 1998</h3></a><a href='https://evil.test/movie'><h3>External</h3></a>")),200,"OK","Content-Type: text/html; charset=utf-8");};
@@ -466,7 +486,7 @@ public partial class MainWindow : Window
         Browser.CoreWebView2.NavigationCompleted+=googleHandler;Browser.CoreWebView2.Navigate(googleFixture);await googleComplete.Task.WaitAsync(TimeSpan.FromSeconds(15));Browser.CoreWebView2.NavigationCompleted-=googleHandler;
         await ReadGoogle(epoch);
         if(searchCards.Count!=1||!searchCards[0].url.EndsWith("?match=1")||Cards.Children.Count!=1)throw new Exception("Scoped Google embed tiles failed");
-        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, scoped Google embed tiles.");
+        WriteSmoke("PASS: WebView2 startup, focus/fullscreen, manual exit, CAPTCHA detection, native cards, history/favorites deletion, playback bridge handshake, persisted progress, play/pause commands, trusted cross-origin original Play click, unsolicited-click rejection, scoped Google embed tiles.");
         Application.Current.Shutdown(0);
     }
 }

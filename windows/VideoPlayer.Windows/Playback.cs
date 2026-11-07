@@ -8,7 +8,7 @@ public partial class MainWindow
     private readonly Dictionary<string,Endpoint> endpoints=[];
     private bool autoStart=true;
     private Window? episodeWindow;
-    private void ResetPlayback(){endpoints.Clear();autoStart=true;episodeOffer=false;nextEpisode=null;episodeTimer?.Stop();episodeBrowser?.CoreWebView2?.Stop();episodeWindow?.Close();episodeWindow=null;nextEpisode=null;}
+    private void ResetPlayback(){endpoints.Clear();playRequests.Clear();verificationActive=false;autoStart=true;episodeOffer=false;nextEpisode=null;episodeTimer?.Stop();episodeBrowser?.CoreWebView2?.Stop();episodeWindow?.Close();episodeWindow=null;nextEpisode=null;}
     private static bool MediaOrigin(string value)=>Policy.Allowed(value)||Uri.TryCreate(value,UriKind.Absolute,out var u)&&u.Scheme=="https"&&u.Port==443&&u.UserInfo.Length==0&&new[]{"stream.freedisc.pl","stream2.freedisc.pl","ovh.freedisc.pl"}.Contains(u.IdnHost);
     private async Task ConfigurePlayback(CoreWebView2 core)
     {
@@ -16,15 +16,19 @@ public partial class MainWindow
         core.FrameCreated+=(_,args)=>
         {
             var frame=args.Frame;
+            Log("frame.created");
+            frame.NavigationCompleted+=(_,e)=>Log("frame.navigation."+(e.IsSuccess?"complete":e.WebErrorStatus.ToString()));
             frame.WebMessageReceived+=(_,e)=>SafeMessage(e,frame.PostWebMessageAsJson);
         };
         var wrapper="""
         if(/^https:\/\/(www\.)?(vider\.(info|pl)|freedisc\.pl)$/.test(location.origin)||['https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl'].includes(location.origin)){
+        window.vpTvTouch={postMessage:function(s){window.chrome.webview.postMessage(JSON.stringify({event:'play-tap',page:location.href,data:JSON.parse(s)}))}};
+        window.vpDiagnostics={postMessage:function(s){window.chrome.webview.postMessage(JSON.stringify({event:'diagnostic',page:location.href,data:JSON.parse(s)}))}};
         window.vpPlayback={postMessage:function(s){window.chrome.webview.postMessage(s)}};
         window.chrome.webview.addEventListener('message',function(e){if(window.vpPlayback.onmessage)window.vpPlayback.onmessage({data:JSON.stringify(e.data)})});
         document.addEventListener('keydown',function(e){if(e.defaultPrevented||e.ctrlKey||e.altKey||e.metaKey||e.repeat)return;const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)))return;if(!document.querySelector('video,.jwplayer,[data-vp-player]'))return;const a=e.code==='Space'||e.code==='Enter'?'toggle':e.code==='ArrowLeft'?'back':e.code==='ArrowRight'?'forward':null;if(a){e.preventDefault();window.chrome.webview.postMessage(JSON.stringify({event:'key',page:location.href,action:a}))}},true);
         """;
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n}");
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("frame-fit.js")+"\n"+Script("tv-play-tap.js")+"\n"+Script("tv-media.js")+"\n"+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n"+Script("ad-diagnostics.js")+"\n}");
     }
     private void SafeMessage(CoreWebView2WebMessageReceivedEventArgs e,Action<string> reply)
     {try{PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),reply);}catch(Exception error){Log("bridge."+error.GetType().Name);}}
@@ -36,16 +40,21 @@ public partial class MainWindow
             using var doc=JsonDocument.Parse(json);var d=doc.RootElement;
             if(!d.TryGetProperty("page",out var page)||page.GetString()!=origin)return;
             var kind=d.GetProperty("event").GetString();
+            if(kind=="play-tap"){_=TrustedPlayTap(origin,d.GetProperty("data").Clone());return;}
+            if(kind=="diagnostic"){AdDiagnostic(d.GetProperty("data"));return;}
             if(kind=="key"){var action=d.GetProperty("action").GetString();if(action is "toggle" or "back" or "forward")MediaCommand(action);return;}
             if(kind=="hello")
             {
+                Log("playback.hello",origin);
                 var token=Guid.NewGuid().ToString("N");endpoints[origin]=new(token,epoch,reply);
                 var old=collections?.Find(currentMovie.url);
                 var position=old!=null&&old.Duration-old.Position>10?old.Position:0;
                 reply(JsonSerializer.Serialize(new{token,position,duration=old?.Duration??0,autostart=autoStart&&!smoke}));return;
             }
             if(!endpoints.TryGetValue(origin,out var endpoint)||endpoint.Epoch!=epoch||d.GetProperty("token").GetString()!=endpoint.Token)return;
-            if(kind=="autoplay-request"&&autoStart&&!smoke){SendMedia(endpoint,"play",false);return;}
+            if(kind is "autoplay-started" or "autoplay-expired" or "autoplay-cancelled"){autoStart=false;Log(kind);return;}
+            if(kind=="autoplay-request"&&autoStart&&!smoke&&!verificationActive){Log("autoplay.request");SendMedia(endpoint,"play",false);return;}
+            if(kind=="media-command-result"){Log("media.command.handled."+(d.TryGetProperty("handled",out var h)&&h.ValueKind==JsonValueKind.True));return;}
             if(kind=="progress")
             {
                 var position=d.GetProperty("position").GetDouble();var duration=d.GetProperty("duration").GetDouble();
@@ -55,16 +64,16 @@ public partial class MainWindow
         }
         catch(Exception error){Log("playback."+error.GetType().Name);}
     }
-    private void SendMedia(Endpoint endpoint,string action,bool manual)=>endpoint.Reply(JsonSerializer.Serialize(new{type="media-command",token=endpoint.Token,action,manual,requestId=Guid.NewGuid().ToString("N"),parentOrigin=new Uri(Browser.CoreWebView2.Source).GetLeftPart(UriPartial.Authority)}));
+    private void SendMedia(Endpoint endpoint,string action,bool manual)=>endpoint.Reply(JsonSerializer.Serialize(new{type="media-command",token=endpoint.Token,action,manual,requestId=PlayRequest(),parentOrigin=new Uri(Browser.CoreWebView2.Source).GetLeftPart(UriPartial.Authority)}));
     private async void MediaCommand(string action)
     {
         if(mode!=Mode.Movie||!ready)return;
-        autoStart=false;
+        autoStart=false;playRequests.Clear();
         try
         {
             var endpoint=endpoints.Where(x=>x.Value.Epoch==epoch).OrderByDescending(x=>new Uri(x.Key).AbsolutePath.StartsWith("/embed")).Select(x=>x.Value).FirstOrDefault();
             if(endpoint!=null)SendMedia(endpoint,action,true);
-            else await Browser.ExecuteScriptAsync("if(window.__vpCancelAutoStart)window.__vpCancelAutoStart();if(window.__vpTvCommand)window.__vpTvCommand("+JsonSerializer.Serialize(action)+");");
+            else await Browser.ExecuteScriptAsync("if(window.__vpCancelAutoStart)window.__vpCancelAutoStart();if(window.__vpTvCommand)window.__vpTvCommand("+JsonSerializer.Serialize(action)+","+JsonSerializer.Serialize(PlayRequest())+");");
         }
         catch(Exception error){Log("media."+error.GetType().Name);}
     }
