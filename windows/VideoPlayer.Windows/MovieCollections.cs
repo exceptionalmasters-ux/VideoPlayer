@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.IO;
 namespace VideoPlayer.Windows;
-public sealed record SavedMovie(string Url,string Title,string Thumbnail,long Opened)
+public sealed record SavedMovie(string Url,string Title,string Thumbnail,long Opened,double Position=0,double Duration=0)
 {
     [JsonIgnore] public string Key => MovieCollections.Key(Url);
     [JsonIgnore] public MovieCard Card => new(Title,Url,Thumbnail);
@@ -25,7 +25,7 @@ public sealed class MovieCollections
     {
         if (!Policy.Movie(url)) return "";
         var freedisc=Policy.Site(url)==Source.Freedisc;
-        var match=Regex.Match(new Uri(url).AbsolutePath,freedisc?@",f-([0-9]+)":@"\+(f[A-Za-z0-9]+)");
+        var match=Regex.Match(new Uri(url).AbsolutePath,freedisc?@"(?:,f-|/embed/video/)([0-9]+)":@"\+(f[A-Za-z0-9]+)");
         return (freedisc?"freedisc:":"vider:")+match.Groups[1].Value;
     }
     private static bool Descriptive(string? value) => !string.IsNullOrWhiteSpace(value) && !value.StartsWith("https://") && !value.StartsWith("Film · ") && value is not ("Vider.info" or "Vider.pl" or "Freedisc" or "Vider");
@@ -33,12 +33,12 @@ public sealed class MovieCollections
     {
         var u=new Uri(i.Url);
         var title=Descriptive(i.Title)?i.Title.Trim():"Film · "+Key(i.Url).Split(':')[1];
-        return i with { Url=u.GetLeftPart(UriPartial.Path),Title=title[..Math.Min(title.Length,180)],Thumbnail=Policy.Thumbnail(i.Thumbnail)?i.Thumbnail:"" };
+        return i with { Url=Policy.MovieUrl(i.Url),Title=title[..Math.Min(title.Length,180)],Thumbnail=Policy.Thumbnail(i.Thumbnail)?i.Thumbnail:"" };
     }
     private SavedMovie Merge(MovieCard card,long time)
     {
         var old=Find(card.url);
-        return Normalize(new(card.url,Descriptive(card.title)?card.title:old?.Title ?? "",Policy.Thumbnail(card.thumbnail)?card.thumbnail:old?.Thumbnail ?? "",time));
+        return Normalize(new(card.url,Descriptive(card.title)?card.title:old?.Title ?? "",Policy.Thumbnail(card.thumbnail)?card.thumbnail:old?.Thumbnail ?? "",time,old?.Position??0,old?.Duration??0));
     }
     public IReadOnlyList<SavedMovie> Items(string collection) => (collection=="favorites"?favorites:history).ToArray();
     public SavedMovie? Find(string url) => history.Concat(favorites).FirstOrDefault(i=>i.Key==Key(url));
@@ -53,6 +53,12 @@ public sealed class MovieCollections
     {
         var old=Find(card.url); if (old==null) return;
         var item=Merge(card,old.Opened); Update(history,item); Update(favorites,item); Save();
+    }
+    public void Progress(string url,double position,double duration)
+    {
+        if(!double.IsFinite(position)||!double.IsFinite(duration)||duration<=0||duration>86400||position<0||position>duration+2)return;
+        var old=Find(url);if(old==null)return;
+        var item=old with {Position=position,Duration=duration};Update(history,item);Update(favorites,item);Save();
     }
     private static void Update(List<SavedMovie> list,SavedMovie item) { var n=list.FindIndex(i=>i.Key==item.Key); if(n>=0)list[n]=item; }
     public bool Toggle(MovieCard card)
@@ -71,3 +77,4 @@ public sealed class MovieCollections
         finally { if(File.Exists(temp))File.Delete(temp); }
     }
 }
+

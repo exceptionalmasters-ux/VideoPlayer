@@ -21,6 +21,8 @@ public partial class MainWindow : Window
     private readonly Queue<string> log = new();
     private bool ready, busy, closed, fullscreen, routed, retryUsed, initializing;
     private bool searching, returnPending;
+    private bool googleSearch, searchDocumentReady;
+    private string activeQuery="";
     private DateTime homeReady, searchDeadline;
     private int epoch, searchTicks;
     private Source source;
@@ -74,10 +76,12 @@ public partial class MainWindow : Window
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.AreHostObjectsAllowed = false;
-            core.Settings.IsWebMessageEnabled = false;
+            core.Settings.IsWebMessageEnabled = true;
+            ConfigurePlayback(core);
             core.NavigationStarting += Navigating;
             core.NavigationCompleted += (_, args) =>
             {
+                if(mode==Mode.Search)searchDocumentReady=args.IsSuccess;
                 if (!args.IsSuccess) { Status.Text = "Nie udało się wczytać strony. Spróbuj ponownie lub wybierz Pokaż stronę."; Log("navigation.failed." + args.WebErrorStatus); }
                 else { Log("navigation.complete", core.Source); _=UpdateMetadata(core.Source,epoch); }
             };
@@ -124,12 +128,12 @@ public partial class MainWindow : Window
     private void Navigating(object? sender, CoreWebView2NavigationStartingEventArgs args)
     {
         if ((smoke || mode == Mode.Results) && args.Uri == "about:blank") return;
-        if (!Policy.Allowed(args.Uri) || mode == Mode.Search && Policy.Site(args.Uri) != source)
+        if (!(mode==Mode.Search && googleSearch ? Policy.Google(args.Uri) : Policy.Allowed(args.Uri)) || mode == Mode.Search && !googleSearch && Policy.Site(args.Uri) != source)
         {
             args.Cancel = true; Log("navigation.blocked", args.Uri);
             Status.Text = "Link prowadzi poza obsługiwany serwis. Pozostajemy w aplikacji."; return;
         }
-        ++epoch;
+        ++epoch;searchDocumentReady=false;
         if (mode == Mode.Movie)
         {
             ExitFullscreen(); presentation.Navigation();
@@ -158,6 +162,7 @@ public partial class MainWindow : Window
         if (!ready || busy || closed || mode == Mode.Results) return;
         if (mode == Mode.Search && searching && DateTime.UtcNow > searchDeadline)
         {
+            if(!googleSearch){StartGoogle();return;}
             searching = false; ShowBrowser();
             Status.Text = "Upłynął czas wyszukiwania. Sprawdź stronę i wybierz Sprawdź wyniki lub ponów wyszukiwanie."; return;
         }
@@ -165,6 +170,8 @@ public partial class MainWindow : Window
         try
         {
             var url = Browser.CoreWebView2.Source;
+            if(mode==Mode.Search&&!searchDocumentReady)return;
+            if (mode==Mode.Search && googleSearch) { await ReadGoogle(current); return; }
             if (!Policy.Allowed(url)) return;
             var stage = await ReadState();
             if (closed || current != epoch) return;
@@ -175,6 +182,7 @@ public partial class MainWindow : Window
                     presentation.Blocked(); ExitFullscreen();
                     await Eval("(function(){if(!document.getElementById('vp-focus-style'))return 'page';return " + Script("focus-player.js") + "}())");
                 }
+                await Browser.ExecuteScriptAsync(Script("verification-layout.js"));
                 ShowBrowser();
                 Status.Text = "Serwis wymaga kodu, zgody lub logowania. Dokończ ten krok na stronie; aplikacja sprawdzi ją ponownie.";
                 searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); return;
@@ -192,10 +200,10 @@ public partial class MainWindow : Window
                 var found = JsonSerializer.Deserialize<List<MovieCard>>(json ?? "[]") ?? [];
                 var movies = found.Where(m => Policy.Movie(m.url) && Policy.Site(m.url) == source).Take(20).ToList();
                 if (movies.Count > 0) { searchCards=movies;collection="results";Render(movies); searching = false; Status.Text = $"Znaleziono: {movies.Count}. Kliknij miniaturkę, aby otworzyć film."; }
+                else if (await SearchEmpty(current)) { searching=false;searchCards=[];Render([]);Status.Text="Brak wyników dla podanego tytułu."; }
                 else if (++searchTicks >= 30)
                 {
-                    searching = false; ShowBrowser();
-                    Status.Text = "Nie odczytano wyników. Sprawdź stronę serwisu, a następnie wybierz Sprawdź wyniki. Możesz też wkleić link do filmu.";
+                    StartGoogle(); return;
                 }
             }
             else if (mode == Mode.Movie)
@@ -218,6 +226,8 @@ public partial class MainWindow : Window
         var text = Query.Text.Trim();
         if (Policy.Movie(text)) { OpenMovie(text); return; }
         if (text.Length is < 1 or > 120) { Status.Text = "Wpisz tytuł (do 120 znaków) albo link do filmu."; return; }
+        activeQuery=text; googleSearch=false;
+        Browser.CoreWebView2.Stop();
         LeaveFullscreen(); ++epoch; mode = Mode.Search; searching = true; routed = false; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); movieTarget = null; returnPending = false;
         collection="results";ClearCollection.Visibility=Visibility.Collapsed;searchCards=[];
         Cards.Children.Clear(); Welcome.Visibility = Visibility.Collapsed;
@@ -263,7 +273,9 @@ public partial class MainWindow : Window
     private void OpenMovie(string url,MovieCard? card=null)
     {
         if (!ready || !Policy.Movie(url)) { Status.Text = "Wklej prawidłowy link do filmu Vider lub Freedisc."; return; }
-        currentMovie=card??collections?.Find(url)?.Card??new MovieCard("",url,"");
+        url=Policy.MovieUrl(url);
+        currentMovie=(card??collections?.Find(url)?.Card??new MovieCard("",url,"")) with {url=url};
+        ResetPlayback();
         CollectionAction(()=>collections?.Opened(currentMovie));
         LeaveFullscreen(); ++epoch; mode = Mode.Movie; searching = false; movieTarget = url; retryUsed = false; returnPending = false; presentation.Navigation();
         PlayerTools.Visibility = Visibility.Visible; ShowBrowser(); Status.Text = "Otwieranie filmu…";
@@ -378,15 +390,15 @@ public partial class MainWindow : Window
     private void FullscreenClick(object sender, RoutedEventArgs e) => ToggleFullscreen();
     private void ReturnClick(object sender, RoutedEventArgs e) { if (movieTarget != null) OpenMovie(movieTarget); }
     private void ShowPageClick(object sender, RoutedEventArgs e) { if (ready) ShowBrowser(); }
-    private void CheckClick(object sender, RoutedEventArgs e) { if (searchTarget != null && mode == Mode.Search) { searching = true; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); Status.Text = "Ponowny odczyt wyników…"; } }
+    private void CheckClick(object sender, RoutedEventArgs e) { if ((googleSearch || searchTarget != null) && mode == Mode.Search) { searching = true; searchTicks = 0; searchDeadline = DateTime.UtcNow.AddSeconds(40); Status.Text = "Ponowny odczyt wyników…"; } }
     private void ReportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog { FileName = "VideoPlayer-raport.txt", Filter = "Raport tekstowy|*.txt" };
         if (dialog.ShowDialog(this) != true) return;
-        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.2.0", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
+        try { File.WriteAllLines(dialog.FileName, new[] { "VideoPlayer Windows 0.3.0", Environment.OSVersion.ToString() }.Concat(log)); Status.Text = "Raport zapisany. Nie zawiera kodów, cookies ani wpisanych tytułów."; }
         catch (IOException) { Status.Text = "Nie udało się zapisać raportu w wybranym miejscu."; }
     }
-    private void WindowClosing(object? sender, CancelEventArgs e) { closed = true; ++epoch; timer.Stop(); Browser.Dispose(); }
+    private void WindowClosing(object? sender, CancelEventArgs e) { closed = true; ++epoch; timer.Stop(); episodeOffer=false;episodeTimer?.Stop();episodeWindow?.Close();episodeBrowser?.Dispose(); Browser.Dispose(); }
     private static void WriteSmoke(string text) => File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "smoke-result.txt"), text);
     private async Task SmokeTest()
     {
@@ -433,3 +445,4 @@ public partial class MainWindow : Window
         Application.Current.Shutdown(0);
     }
 }
+

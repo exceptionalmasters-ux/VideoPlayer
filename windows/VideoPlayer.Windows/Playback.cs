@@ -1,0 +1,100 @@
+using System.Text.Json;
+using System.Windows;
+using Microsoft.Web.WebView2.Core;
+namespace VideoPlayer.Windows;
+public partial class MainWindow
+{
+    private sealed record Endpoint(string Token,int Epoch,Action<string> Reply);
+    private readonly Dictionary<string,Endpoint> endpoints=[];
+    private bool autoStart=true;
+    private Window? episodeWindow;
+    private void ResetPlayback(){endpoints.Clear();autoStart=true;episodeOffer=false;nextEpisode=null;episodeTimer?.Stop();episodeBrowser?.CoreWebView2?.Stop();episodeWindow?.Close();episodeWindow=null;nextEpisode=null;}
+    private static bool MediaOrigin(string value)=>Policy.Allowed(value)||Uri.TryCreate(value,UriKind.Absolute,out var u)&&u.Scheme=="https"&&u.Port==443&&u.UserInfo.Length==0&&new[]{"stream.freedisc.pl","stream2.freedisc.pl","ovh.freedisc.pl"}.Contains(u.IdnHost);
+    private void ConfigurePlayback(CoreWebView2 core)
+    {
+        core.WebMessageReceived+=(_,e)=>PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),core.PostWebMessageAsJson);
+        core.FrameCreated+=(_,args)=>
+        {
+            var frame=args.Frame;
+            frame.WebMessageReceived+=(_,e)=>PlaybackMessage(e.Source,e.TryGetWebMessageAsString(),frame.PostWebMessageAsJson);
+        };
+        var wrapper="""
+        if(/^https:\/\/(www\.)?(vider\.(info|pl)|freedisc\.pl)$/.test(location.origin)||['https://stream.freedisc.pl','https://stream2.freedisc.pl','https://ovh.freedisc.pl'].includes(location.origin)){
+        window.vpPlayback={postMessage:function(s){window.chrome.webview.postMessage(s)}};
+        window.chrome.webview.addEventListener('message',function(e){if(window.vpPlayback.onmessage)window.vpPlayback.onmessage({data:JSON.stringify(e.data)})});
+        document.addEventListener('keydown',function(e){if(e.defaultPrevented||e.ctrlKey||e.altKey||e.metaKey||e.repeat)return;const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName)))return;if(!document.querySelector('video,.jwplayer,[data-vp-player]'))return;const a=e.code==='Space'||e.code==='Enter'?'toggle':e.code==='ArrowLeft'?'back':e.code==='ArrowRight'?'forward':null;if(a){e.preventDefault();window.chrome.webview.postMessage(JSON.stringify({event:'key',page:location.href,action:a}))}},true);
+        """;
+        _=core.AddScriptToExecuteOnDocumentCreatedAsync(wrapper+Script("original-autostart.js")+"\n"+Script("playback-progress.js")+"\n}");
+    }
+    private void PlaybackMessage(string origin,string json,Action<string> reply)
+    {
+        try
+        {
+            if(closed||mode!=Mode.Movie||currentMovie==null||!MediaOrigin(origin)||!Policy.Movie(Browser.CoreWebView2.Source))return;
+            using var doc=JsonDocument.Parse(json);var d=doc.RootElement;
+            if(!d.TryGetProperty("page",out var page)||page.GetString()!=origin)return;
+            var kind=d.GetProperty("event").GetString();
+            if(kind=="key"){var action=d.GetProperty("action").GetString();if(action is "toggle" or "back" or "forward")MediaCommand(action);return;}
+            if(kind=="hello")
+            {
+                var token=Guid.NewGuid().ToString("N");endpoints[origin]=new(token,epoch,reply);
+                var old=collections?.Find(currentMovie.url);
+                var position=old!=null&&old.Duration-old.Position>10?old.Position:0;
+                reply(JsonSerializer.Serialize(new{token,position,duration=old?.Duration??0,autostart=autoStart&&!smoke}));return;
+            }
+            if(!endpoints.TryGetValue(origin,out var endpoint)||endpoint.Epoch!=epoch||d.GetProperty("token").GetString()!=endpoint.Token)return;
+            if(kind=="autoplay-request"&&autoStart&&!smoke){SendMedia(endpoint,"play",false);return;}
+            if(kind=="progress")
+            {
+                var position=d.GetProperty("position").GetDouble();var duration=d.GetProperty("duration").GetDouble();
+                CollectionAction(()=>collections?.Progress(currentMovie.url,position,duration));
+                ConsiderEpisode(position,duration);
+            }
+        }
+        catch(Exception error){Log("playback."+error.GetType().Name);}
+    }
+    private void SendMedia(Endpoint endpoint,string action,bool manual)=>endpoint.Reply(JsonSerializer.Serialize(new{type="media-command",token=endpoint.Token,action,manual,requestId=Guid.NewGuid().ToString("N"),parentOrigin=new Uri(Browser.CoreWebView2.Source).GetLeftPart(UriPartial.Authority)}));
+    private async void MediaCommand(string action)
+    {
+        if(mode!=Mode.Movie||!ready)return;
+        autoStart=false;
+        try
+        {
+            var endpoint=endpoints.Where(x=>x.Value.Epoch==epoch).OrderByDescending(x=>new Uri(x.Key).AbsolutePath.StartsWith("/embed")).Select(x=>x.Value).FirstOrDefault();
+            if(endpoint!=null)SendMedia(endpoint,action,true);
+            else await Browser.ExecuteScriptAsync("if(window.__vpCancelAutoStart)window.__vpCancelAutoStart();if(window.__vpTvCommand)window.__vpTvCommand("+JsonSerializer.Serialize(action)+");");
+        }
+        catch(Exception error){Log("media."+error.GetType().Name);}
+    }
+    private void PlayClick(object sender,RoutedEventArgs e)=>MediaCommand("toggle");
+    private void GoogleClick(object sender,RoutedEventArgs e)
+    {
+        if(!ready||Query.Text.Trim().Length is <1 or >120)return;
+        activeQuery=Query.Text.Trim();StartGoogle();
+    }
+    private void StartGoogle()
+    {
+        LeaveFullscreen();++epoch;mode=Mode.Search;googleSearch=true;searching=true;searchTicks=0;searchDeadline=DateTime.UtcNow.AddSeconds(35);
+        collection="results";searchCards=[];Cards.Children.Clear();Welcome.Visibility=Visibility.Collapsed;PlayerTools.Visibility=Visibility.Collapsed;
+        Browser.CoreWebView2.Stop();Browser.CoreWebView2.Navigate(Policy.GoogleSearch(source,activeQuery));
+        ShowBrowser();Status.Text="Awaryjne wyszukiwanie Google · w razie potrzeby potwierdź zgodę na stronie. Wyniki pojawią się jako kafelki.";
+    }
+    private async Task<bool> SearchEmpty(int current)
+    {
+        using var doc=JsonDocument.Parse(await Eval(Script("search-outcome.js"))??"{}");
+        return current==epoch&&doc.RootElement.TryGetProperty("empty",out var empty)&&empty.GetBoolean();
+    }
+    private async Task ReadGoogle(int current)
+    {
+        if(!searching)return;
+        var raw=await Eval(Script("google-results.js").Replace("__VP_SOURCE__",JsonSerializer.Serialize(source==Source.Freedisc?"FREEDISC":"VIDER")));
+        if(current!=epoch||closed)return;
+        using var doc=JsonDocument.Parse(raw??"{}");var d=doc.RootElement;
+        var stage=d.TryGetProperty("stage",out var s)?s.GetString():"pending";
+        if(stage=="access"){searchDeadline=DateTime.UtcNow.AddSeconds(35);ShowBrowser();Status.Text="Google wymaga potwierdzenia. Przewiń stronę myszą i dokończ ten krok tutaj; wyszukiwanie zostanie wznowione.";return;}
+        var rows=d.TryGetProperty("rows",out var r)?JsonSerializer.Deserialize<List<MovieCard>>(r.GetRawText())??[]:[];
+        var valid=rows.Where(m=>Policy.Movie(m.url)&&Policy.Site(m.url)==source).Select(m=>m with {url=Policy.MovieUrl(m.url)}).DistinctBy(m=>MovieCollections.Key(m.url)).Take(20).ToList();
+        if(valid.Count>0||stage=="complete")
+        {searching=false;searchCards=valid;collection="results";Render(valid);Status.Text=valid.Count>0?$"Znaleziono: {valid.Count}. Kliknij miniaturkę.":"Brak wyników dla podanego tytułu.";}
+    }
+}

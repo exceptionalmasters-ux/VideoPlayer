@@ -29,3 +29,19 @@ try {
  Check(MovieCollections.Key("https://freedisc.pl/user,f-123,old")==MovieCollections.Key("https://www.freedisc.pl/user,f-123,new"),"Freedisc stable identity");
  Console.WriteLine("Persistent movie collections: all checks passed.");
 } finally { if(Directory.Exists(folder))Directory.Delete(folder,true); }
+
+
+Check(Policy.Movie("https://freedisc.pl/embed/video/8307530?match=1"),"Embed movie");
+Check(!Policy.Movie("https://freedisc.pl/embed/video/8307530/evil"),"Embed path boundary");
+Check(Policy.MovieUrl("https://freedisc.pl/embed/video/8307530?match=1&token=secret").EndsWith("?match=1"),"Embed match retained without tracking");
+Check(MovieCollections.Key("https://freedisc.pl/u,f-8307530,test")==MovieCollections.Key("https://freedisc.pl/embed/video/8307530"),"Embed shares file identity");
+Check(Policy.Google("https://consent.google.com/m"),"Google consent");
+Check(!Policy.Google("https://google.com.evil.test/search")&&!Policy.Google("https://accounts.google.com/"),"Google scope");
+Check(!Policy.Allowed("https://www.google.com/search?q=test"),"Google isolated from playback policy");
+var plan=EpisodePlan.Parse("Serial S1E01 lektor");Check(plan?.Next().Query=="Serial S01E02","Next episode");
+Check(plan?.NextSeason().Query=="Serial S02E01","Season fallback");
+Check(plan?.Next().Matches("Serial S01E02 HD")==true&&!plan.Next().Matches("Inny serial S01E02"),"Episode series identity");
+Check(EpisodePlan.Parse("Ronin 1998")==null,"Movie has no episode plan");
+var resumeFile=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".json");
+try {var library=new MovieCollections(resumeFile);var movie=new MovieCard("Film","https://freedisc.pl/u,f-8307530,title","");library.Opened(movie);library.Progress(movie.url,123,7200);library.Opened(movie with {url="https://freedisc.pl/embed/video/8307530?match=1"});var reload=new MovieCollections(resumeFile);Check(reload.Find(movie.url)?.Position==123,"Resume persists across reopen and embed URL");library.Progress(movie.url,double.NaN,7200);Check(library.Find(movie.url)?.Position==123,"Invalid progress rejected");}finally{File.Delete(resumeFile);}
+Console.WriteLine("Windows embed, Google, episodes and resume: all checks passed.");
