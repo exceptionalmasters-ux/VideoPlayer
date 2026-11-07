@@ -19,7 +19,8 @@
     for(let p=player.parentElement;p&&p!==document.body;p=p.parentElement)p.setAttribute('data-vp-win-parent','');
     if(!document.getElementById('vp-desktop-fit-style')){
       const style=document.createElement('style');style.id='vp-desktop-fit-style';
-      style.textContent='[data-vp-win-parent]{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;overflow:visible!important}' +
+      style.textContent='#embed_hover_header,.embed-header,.badge_rating,#tip{display:none!important}' +
+        '[data-vp-win-parent]{transform:none!important;contain:none!important;filter:none!important;perspective:none!important;overflow:visible!important}' +
         '[data-vp-win-player]{position:fixed!important;inset:0!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;transform:none!important;aspect-ratio:auto!important;background:#000!important}' +
         '[data-vp-win-player] .jw-aspect{display:none!important}' +
         '[data-vp-win-player] .jw-media{position:absolute!important;inset:0!important;width:100%!important;height:100%!important}' +

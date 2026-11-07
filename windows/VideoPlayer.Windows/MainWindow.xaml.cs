@@ -462,7 +462,7 @@ public partial class MainWindow : Window
         const string embedRoot="https://vider.info/vid/+fembedtest";
         const string embedFixture="https://freedisc.pl/embed/video/12345";
         var embedHtml="""
-        <!doctype html><html><body style="margin:0"><header style="height:30px">Login and rating</header><div class="jwplayer" id="embedded-player" style="position:relative;width:740px;height:390px;background:#222"><video></video><div class="jw-display-icon-display" role="button" style="position:absolute;left:40%;top:40%;width:120px;height:70px;background:white;color:black" onclick="if(event.isTrusted){window.smokePlayer.state='playing';window.smokePlayer.events.time({position:321,duration:7200})}">Play</div></div><script>window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){},pause(){this.state='paused'},seek(){},getPosition(){return 0}};window.jwplayer=()=>window.smokePlayer;</script></body></html>
+        <!doctype html><html><body style="margin:0"><header id="embed_hover_header" style="height:30px;position:fixed;top:0;z-index:9999">Login and rating</header><div class="jwplayer" id="embedded-player" style="position:relative;width:740px;height:390px;background:#222"><video></video><div class="jw-display-icon-display" role="button" style="position:absolute;left:40%;top:40%;width:120px;height:70px;background:white;color:black" onclick="if(event.isTrusted){window.smokePlayer.state='playing';window.smokePlayer.events.time({position:321,duration:7200})}">Play</div></div><script>window.smokePlayer={state:'paused',events:{},getState(){return this.state},on(n,f){this.events[n]=f},play(){},pause(){this.state='paused'},seek(){},getPosition(){return 0}};window.jwplayer=()=>window.smokePlayer;</script></body></html>
         """;
         foreach(var fixture in new[]{embedRoot,embedFixture})Browser.CoreWebView2.AddWebResourceRequestedFilter(fixture,CoreWebView2WebResourceContext.Document);
         Browser.CoreWebView2.WebResourceRequested+=(_,args)=>{
@@ -475,7 +475,7 @@ public partial class MainWindow : Window
         var embedDeadline=DateTime.UtcNow.AddSeconds(15);
         while(!endpoints.ContainsKey(embedFixture)){if(DateTime.UtcNow>embedDeadline)throw new Exception("Embedded playback handshake failed: "+string.Join(" | ",log));await Task.Delay(100);}
         await FocusMovie(true,epoch);await Task.Delay(300);
-        const string layoutCheck="(function(){const p=document.querySelector('.jwplayer'),r=p.getBoundingClientRect();return Math.abs(r.x)<2&&Math.abs(r.y)<2&&Math.abs(r.width-innerWidth)<2&&Math.abs(r.height-innerHeight)<2&&getComputedStyle(p.querySelector('video')).objectFit==='contain';}())";
+        const string layoutCheck="(function(){const p=document.querySelector('.jwplayer'),r=p.getBoundingClientRect();return Math.abs(r.x)<2&&Math.abs(r.y)<2&&Math.abs(r.width-innerWidth)<2&&Math.abs(r.height-innerHeight)<2&&getComputedStyle(p.querySelector('video')).objectFit==='contain'&&getComputedStyle(document.getElementById('embed_hover_header')).display==='none';}())";
         if(embeddedFrame==null||await embeddedFrame.ExecuteScriptAsync(layoutCheck)!="true")throw new Exception("Embedded player does not fill viewport");
         LeaveFullscreen();Width=950;Height=650;await Task.Delay(400);
         if(await embeddedFrame.ExecuteScriptAsync(layoutCheck)!="true")throw new Exception("Embedded player did not follow window resize");
