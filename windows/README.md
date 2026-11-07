@@ -1,4 +1,4 @@
-# VideoPlayer dla Windows — 0.3.0
+# VideoPlayer dla Windows — 0.3.1
 
 Aplikacja WPF / C# / .NET 10 z WebView2. Windows 10/11 x64.
 
@@ -48,3 +48,7 @@ Zakładki **Historia** i **Ulubione** pokazują własne, lokalne kolekcje jako k
 - Reklamy pozostają obsługiwane przez oryginalny odtwarzacz.
 
 Walidacja: testy polityk adresów i trwałości kolekcji, 44 wspólne testy skryptów oraz test integracyjny WPF/WebView2 na Windows (pełny ekran, przywracanie strony, most odtwarzania, zapis pozycji, Play/Pauza, filtrowanie wyników Google). Test używa lokalnych kontrolowanych stron; działanie konkretnych serwisów nadal zależy od ich dostępności i zmian.
+
+## Poprawka 0.3.1
+
+Windows aktywuje widoczny oryginalny przycisk Play również wewnątrz ramki odtwarzacza. Kliknięcie jest dopuszczone wyłącznie dla aktualnego żądania odtwarzania, w miejscu oryginalnej kontrolki bez zasłaniającej warstwy. Reklamy i formularze serwisu pozostają aktywne. Raport zawiera teraz stan odtwarzacza, przypisanie źródła wideo, inicjalizację ramki oraz wynik polecenia startu, bez adresu strumienia i danych formularzy. Test Windows sprawdza także ramkę innej domeny, której oryginalny Play reaguje wyłącznie na zaufane kliknięcie, oraz odrzucanie niezamówionych kliknięć.
