@@ -8,33 +8,51 @@ permissions:
   actions: read
   contents: write
 concurrency:
-  group: publish-android-0.9.1
+  group: publish-android-0.9.2
   cancel-in-progress: false
 jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: VideoPlayer-debug
-          run-id: 42270284748
-          github-token: ${{ github.token }}
-          path: verified
-      - name: Publish the verified universal APK
+      - name: Verify tested source
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/$GH_REPO/actions/runs/42993565251 --jq '.conclusion')" = success
+          test "$(gh api repos/$GH_REPO/actions/runs/42993565251 --jq '.head_sha')" = d1715f09e70f336e1cdcff4893c5c2e66d39fb7a
+      - uses: actions/download-artifact@v4
+        with:
+          name: VideoPlayer-debug
+          run-id: 42993565251
+          github-token: ${{ github.token }}
+          path: verified
+      - name: Publish tested Android and TV APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           mapfile -t apks < <(find verified -type f -name '*.apk')
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" VideoPlayer-0.9.1.apk
-          echo 'b1624a121e2e6124856de45fa6c6f7a75efdcb7ef29aa7e683e60544cda735ac  VideoPlayer-0.9.1.apk' | sha256sum -c -
-          if gh release view android-v0.9.1 >/dev/null 2>&1; then
-            gh release download android-v0.9.1 --pattern VideoPlayer-0.9.1.apk --output existing.apk
-            echo 'b1624a121e2e6124856de45fa6c6f7a75efdcb7ef29aa7e683e60544cda735ac  existing.apk' | sha256sum -c -
+          cp "${apks[0]}" VideoPlayer-0.9.2.apk
+          echo '907e2a630756015d185452d9a9c490e14a7c5d74926171285690a77d647dcad4  VideoPlayer-0.9.2.apk' > SHA256-Android-0.9.2.txt
+          sha256sum -c SHA256-Android-0.9.2.txt
+          cat > release-notes.txt <<'NOTES'
+          VideoPlayer 0.9.2 — telefon, tablet i Android TV.
+          Wczytywanie dużej historii: najwyżej 24 kafelki jednocześnie na TV, przyciski Poprzednia/Następna, zachowanie strony po powrocie.
+          Historia 200 pozycji i momenty wznowienia pozostają zachowane. Lista jest odczytywana raz dla strony.
+          Mniejsze dekodowanie obrazków; błąd pamięci miniatury pozostawia neutralny kafelek.
+          Nieprawidłowy typ jednej listy nie powoduje awarii ani wyczyszczenia innych list przy odczycie.
+          Testy jednostkowe, lint, 32 testy Android TV 14 i 46 testów telefonu Android 15 przeszły. Test kolekcji obejmuje 200 zapisów, strony, ponowne utworzenie ekranu, pozycje wznowienia i błędny typ danych.
+          Certyfikat zgodny z 0.9.1 — instalacja jako aktualizacja.
+          Testowany kod: d1715f09e70f336e1cdcff4893c5c2e66d39fb7a. Build: 42993565251.
+          NOTES
+          if gh release view android-v0.9.2 >/dev/null 2>&1; then
+            gh release download android-v0.9.2 --pattern VideoPlayer-0.9.2.apk --output existing.apk
+            echo '907e2a630756015d185452d9a9c490e14a7c5d74926171285690a77d647dcad4  existing.apk' | sha256sum -c -
           else
-            gh release create android-v0.9.1 VideoPlayer-0.9.1.apk --target "$GITHUB_SHA" --title 'VideoPlayer 0.9.1 — Android i Android TV' --notes 'Bezpośrednie Play/Pauza do ramki odtwarzacza na Android TV, również przed pełnym ekranem; ręczne sterowanie wyłącza ponawianie autostartu. Pole CAPTCHA pod obrazkiem i układ uwzględniający klawiaturę TV. Nowe żądanie przy ponownym wyszukaniu tej samej frazy. Strzałki i przyciski Góra/Dół przewijają wewnętrzne okna cookies Google. SHA-256: b1624a121e2e6124856de45fa6c6f7a75efdcb7ef29aa7e683e60544cda735ac' --prerelease
+            gh release create android-v0.9.2 VideoPlayer-0.9.2.apk SHA256-Android-0.9.2.txt --target "$GITHUB_SHA" --title 'VideoPlayer 0.9.2 — Android i Android TV' --notes-file release-notes.txt --prerelease --latest=false
           fi
