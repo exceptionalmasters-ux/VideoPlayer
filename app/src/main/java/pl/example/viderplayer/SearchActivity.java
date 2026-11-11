@@ -41,7 +41,10 @@ public final class SearchActivity extends Activity {
     private JSONArray searchResults = new JSONArray();
     private String collection = "results";
     private LocalLibrary library;
-    private Button clearCollection;
+    private Button clearCollection,pagePrevious,pageNext;
+    private LinearLayout pageControls;
+    private TextView pageLabel;
+    private CollectionPage currentPage;
     private int scanToken;
     private boolean active = true;
     private final DiagnosticLog diagnostics = new DiagnosticLog();
@@ -163,6 +166,11 @@ public final class SearchActivity extends Activity {
         status = text("Wpisz tytuł. Filmy pokażą się tutaj jako miniatury.", 13, Color.LTGRAY);
         status.setPadding(dp(16), dp(8), dp(16), dp(10));
         root.addView(status);
+        pageControls=new LinearLayout(this);pageControls.setGravity(Gravity.CENTER_VERTICAL);
+        addButton(pageControls,"◀ Poprzednia",()->changePage(-1));pagePrevious=(Button)pageControls.getChildAt(0);
+        pageLabel=text("",13,Color.LTGRAY);pageLabel.setGravity(Gravity.CENTER);pageControls.addView(pageLabel,new LinearLayout.LayoutParams(0,dp(40),1));
+        addButton(pageControls,"Następna ▶",()->changePage(1));pageNext=(Button)pageControls.getChildAt(pageControls.getChildCount()-1);
+        pageControls.setVisibility(View.GONE);root.addView(pageControls);
         FrameLayout workspace = new FrameLayout(this);
         root.addView(workspace, new LinearLayout.LayoutParams(-1, 0, 1));
         engine = new TvWebView(this);
@@ -277,7 +285,7 @@ public final class SearchActivity extends Activity {
         });
         if(television){
             tvRows.add(java.util.Arrays.asList(sourcePicker));tvRows.add(java.util.Arrays.asList(query,searchButton));
-            tvRows.add(children(actions));tvRows.add(children(collections));tvRows.add(java.util.Arrays.asList(previewButton));
+            tvRows.add(children(actions));tvRows.add(children(collections));tvRows.add(java.util.Arrays.asList(previewButton));tvRows.add(children(pageControls));
             searchContent.getViewTreeObserver().addOnGlobalLayoutListener(this::wireSearchNavigation);
             query.post(query::requestFocus);
         }
@@ -293,7 +301,7 @@ public final class SearchActivity extends Activity {
         }
         if(saved==null)applyEpisodeQuery(getIntent());
         String initialCollection=saved!=null?saved.getString("collection","results"):getIntent().getStringExtra("collection");
-        if(initialCollection!=null&&!"results".equals(initialCollection))showCollection(initialCollection);
+        if(initialCollection!=null&&!"results".equals(initialCollection))showCollection(initialCollection,saved==null?0:saved.getInt("selectedResultIndex",0));
     }
     private static java.util.List<View> children(android.view.ViewGroup row){java.util.List<View> views=new java.util.ArrayList<>();for(int i=0;i<row.getChildCount();i++)views.add(row.getChildAt(i));return views;}
     private void wireSearchNavigation(){
@@ -310,12 +318,13 @@ public final class SearchActivity extends Activity {
     private void togglePointer(){
         if(pointer!=null){boolean on=pointer.toggle();Toast.makeText(this,on?"Kursor: strzałki przesuwają · OK klika · Wstecz wyłącza":"Kursor wyłączony",Toast.LENGTH_SHORT).show();}
     }
-    private void showCollection(String selected){
+    private void showCollection(String selected){showCollection(selected,0);}
+    private void showCollection(String selected,int selection){
         if("results".equals(collection))searchResults=results;
         collection="history".equals(selected)||"favorites".equals(selected)?selected:"results";
         stopSearch();engine.stopLoading();dismissVerification();selectedResultIndex=0;
         results="results".equals(collection)?searchResults:library.items(collection);
-        render();
+        selectedResultIndex=selection;render();
     }
     private void clearCollection(){
         if("results".equals(collection))return;
@@ -348,7 +357,7 @@ public final class SearchActivity extends Activity {
             if(canRestart&&which==restartIndex){openMovie(url,true);return;}
             if(which==0)library.toggle(url,item.optString("title"),item.optString("thumbnail"));
             else library.remove("history",url);
-            int previousIndex=selectedResultIndex;showCollection(collection);selectedResultIndex=previousIndex;
+            showCollection(collection,selectedResultIndex);
         }).setNegativeButton("Zamknij",null).show();
     }
     private void selectSource(SiteSource source) {
@@ -366,6 +375,7 @@ public final class SearchActivity extends Activity {
         results = new JSONArray();searchResults=results;
         selectedResultIndex=0;
         if(television){query.setNextFocusDownId(View.NO_ID);searchButton.setNextFocusDownId(View.NO_ID);}
+        pageControls.setVisibility(View.GONE);
         thumbnails.nextGeneration();
         grid.removeAllViews();
         query.setHint("Tytuł filmu, np. " + source.example);
@@ -397,6 +407,7 @@ public final class SearchActivity extends Activity {
         results = new JSONArray();searchResults=results;
         selectedResultIndex=0;
         if(television){query.setNextFocusDownId(View.NO_ID);searchButton.setNextFocusDownId(View.NO_ID);}
+        pageControls.setVisibility(View.GONE);
         thumbnails.nextGeneration();
         grid.removeAllViews();
         resultsView.setVisibility(View.VISIBLE);
@@ -783,6 +794,10 @@ public final class SearchActivity extends Activity {
         if (verificationPanel != null) cancelVerification();
         else super.onBackPressed();
     }
+    private void changePage(int delta){
+        if(currentPage==null)return;
+        selectedResultIndex=currentPage.move(delta);resultsView.scrollTo(0,0);render();
+    }
     private void render() {
         stopSearch();
         previewButton.setVisibility(View.GONE);
@@ -797,7 +812,13 @@ public final class SearchActivity extends Activity {
         int columns=television?4:2;
         int width = (getResources().getDisplayMetrics().widthPixels - dp(television?64+16+columns*12:40)) / columns;
         int imageHeight=television?width*9/16:dp(116);
-        for (int i = 0; i < results.length(); i++) {
+        MovieLibrary snapshot=library.snapshot();
+        currentPage=new CollectionPage(results.length(),selectedResultIndex,television?24:20);
+        selectedResultIndex=currentPage.selected;
+        pageControls.setVisibility(currentPage.pages>1?View.VISIBLE:View.GONE);
+        pagePrevious.setEnabled(currentPage.number>1);pageNext.setEnabled(currentPage.number<currentPage.pages);
+        pageLabel.setText("Strona "+currentPage.number+" / "+currentPage.pages+" · "+(currentPage.total==0?0:currentPage.first+1)+"–"+currentPage.end+" z "+currentPage.total);
+        for (int i = currentPage.first; i < currentPage.end; i++) {
             JSONObject result = results.optJSONObject(i);
             if (result == null) continue;
             String url = result.optString("url");
@@ -830,10 +851,10 @@ public final class SearchActivity extends Activity {
             name.setPadding(dp(10), dp(8), dp(10), dp(4));
             card.addView(name);
             TextView host = text(Uri.parse(url).getHost(), 11, Color.rgb(114, 220, 196));
-            MovieLibrary.Item saved=library.find(url);
+            MovieLibrary.Item saved=snapshot.find(url);
             if(saved!=null&&saved.position>0)host.setText("Wznów · "+MovieLibrary.clock(saved.position)+" / "+MovieLibrary.clock(saved.duration));
             else if(saved!=null&&saved.completed)host.setText("Obejrzano · od początku");
-            if(library.favorite(url))host.setText("★ "+host.getText());
+            if(snapshot.favorite(url))host.setText("★ "+host.getText());
             host.setPadding(dp(10), 0, dp(10), dp(8));
             card.addView(host);
             card.setContentDescription("Odtwórz " + result.optString("title")+" · "+host.getText());
@@ -858,6 +879,7 @@ public final class SearchActivity extends Activity {
                         if(event.getAction()==android.view.KeyEvent.ACTION_UP){if(!Boolean.TRUE.equals(v.getTag()))v.performClick();v.setTag(null);}
                         return true;
                     }
+                    if(key==android.view.KeyEvent.KEYCODE_PAGE_DOWN||key==android.view.KeyEvent.KEYCODE_PAGE_UP){if(event.getAction()==android.view.KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0)changePage(key==android.view.KeyEvent.KEYCODE_PAGE_DOWN?1:-1);return true;}
                     int target=position;
                     if(key==android.view.KeyEvent.KEYCODE_DPAD_UP)target=position-columns;
                     else if(key==android.view.KeyEvent.KEYCODE_DPAD_DOWN)target=position+columns<grid.getChildCount()?position+columns:position;
@@ -870,7 +892,7 @@ public final class SearchActivity extends Activity {
             }
             if(grid.getChildCount()>0){
                 wireSearchNavigation();
-                grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
+                grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.max(0,Math.min(selectedResultIndex-(currentPage==null?0:currentPage.first),grid.getChildCount()-1))).requestFocus();});
             }
         }
     }
@@ -943,10 +965,10 @@ public final class SearchActivity extends Activity {
     @Override protected void onResume() {
         super.onResume(); active = true;
         TvUi.immersive(this);
-        if(library!=null&&engine!=null&&!"results".equals(collection)){int previousIndex=selectedResultIndex;showCollection(collection);selectedResultIndex=previousIndex;}
+        if(library!=null&&engine!=null&&!"results".equals(collection)){showCollection(collection,selectedResultIndex);}
         else if(engine!=null&&!searchRunning&&results.length()>0)render();
         if(television&&grid!=null&&grid.getChildCount()>0&&verificationPanel==null)
-            grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.min(selectedResultIndex,grid.getChildCount()-1)).requestFocus();});
+            grid.post(()->{if(grid.getChildCount()>0)grid.getChildAt(Math.max(0,Math.min(selectedResultIndex-(currentPage==null?0:currentPage.first),grid.getChildCount()-1))).requestFocus();});
         if(google!=null){google.resume();return;}
         if (engine != null) {
             engine.onResume();
@@ -974,4 +996,5 @@ public final class SearchActivity extends Activity {
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }
+
 

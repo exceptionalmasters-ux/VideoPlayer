@@ -52,5 +52,38 @@ public final class CollectionsTest {
             }
         }finally{restore(prefs,previous);restore(legacy,old);}
     }
+
+    @Test public void fullHistoryIsPagedAndKeepsResumePositionsAcrossRecreation()throws Exception{
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        SharedPreferences prefs=context.getSharedPreferences("movie_library",0);Map<String,?> previous=new HashMap<>(prefs.getAll());
+        org.json.JSONArray history=new org.json.JSONArray();
+        for(int i=0;i<MovieLibrary.HISTORY_LIMIT;i++)history.put(new org.json.JSONObject().put("url","https://vider.info/vid/+fbulk"+i).put("title","Historia serialu S01E"+i).put("opened",200-i).put("position",i==124?3723:0).put("duration",7200));
+        String stored=history.toString();
+        try{
+            assertTrue(prefs.edit().clear().putBoolean("migrated",true).putString("history",stored).putString("favorites",new org.json.JSONArray().put(history.getJSONObject(0)).toString()).commit());
+            try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(new Intent(context,SearchActivity.class).putExtra("collection","history"))){
+                final int[] pageSize={0},lastFirst={0};
+                scenario.onActivity(activity->{try{GridLayout grid=(GridLayout)field(activity,"grid");CollectionPage page=(CollectionPage)field(activity,"currentPage");pageSize[0]=page.size;assertEquals(200,page.total);assertEquals(page.size,grid.getChildCount());assertTrue(grid.getChildCount()<=24);}catch(Exception e){throw new AssertionError(e);}});
+                int pages=(200+pageSize[0]-1)/pageSize[0];
+                for(int n=1;n<pages;n++){
+                    scenario.onActivity(activity->{try{((View)field(activity,"pageNext")).performClick();CollectionPage page=(CollectionPage)field(activity,"currentPage");GridLayout grid=(GridLayout)field(activity,"grid");assertTrue(grid.getChildCount()<=24);assertEquals(page.end-page.first,grid.getChildCount());lastFirst[0]=page.first;}catch(Exception e){throw new AssertionError(e);}});
+                    InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                }
+                scenario.onActivity(activity->{try{CollectionPage page=(CollectionPage)field(activity,"currentPage");assertEquals(page.pages,page.number);assertFalse(((View)field(activity,"pageNext")).isEnabled());((View)field(activity,"pagePrevious")).performClick();lastFirst[0]=((CollectionPage)field(activity,"currentPage")).first;}catch(Exception e){throw new AssertionError(e);}});
+                scenario.recreate();
+                scenario.onActivity(activity->{try{CollectionPage page=(CollectionPage)field(activity,"currentPage");assertEquals(lastFirst[0],page.first);assertTrue(((GridLayout)field(activity,"grid")).getChildCount()<=24);}catch(Exception e){throw new AssertionError(e);}});
+            }
+            assertEquals(stored,prefs.getString("history",""));assertEquals(200,new LocalLibrary(context).items("history").length());assertEquals(3723,new LocalLibrary(context).find("https://vider.info/vid/+fbulk124").position);assertEquals(1,new LocalLibrary(context).items("favorites").length());
+        }finally{restore(prefs,previous);}
+    }
+    @Test public void malformedCollectionTypeDoesNotCrashOrEraseOtherLists()throws Exception{
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();SharedPreferences prefs=context.getSharedPreferences("movie_library",0);Map<String,?> previous=new HashMap<>(prefs.getAll());
+        try{
+            assertTrue(prefs.edit().clear().putBoolean("migrated",true).putInt("history",7).putString("favorites","[{\"url\":\"https://vider.info/vid/+ffavorite\",\"title\":\"Ulubiony\"}]").commit());
+            LocalLibrary library=new LocalLibrary(context);assertEquals(0,library.items("history").length());assertEquals(1,library.items("favorites").length());assertEquals(7,prefs.getInt("history",0));
+            try(ActivityScenario<SearchActivity> scenario=ActivityScenario.launch(new Intent(context,SearchActivity.class).putExtra("collection","history"))){scenario.onActivity(activity->{try{assertEquals(0,((GridLayout)field(activity,"grid")).getChildCount());}catch(Exception e){throw new AssertionError(e);}});}
+        }finally{restore(prefs,previous);}
+    }
 }
+
 

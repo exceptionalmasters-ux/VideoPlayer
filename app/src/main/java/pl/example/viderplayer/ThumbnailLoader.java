@@ -54,8 +54,9 @@ final class ThumbnailLoader {
                         }
                     }
                 }
+            } catch (OutOfMemoryError exhausted) { cache.evictAll(); /* Optional poster must never terminate playback/history. */
             } catch (Exception ignored) { /* Keep the neutral play thumbnail on failure. */ }
-            if (result != null) cache.put(movie, result);
+            if (result != null && !stopped && epoch == generation) cache.put(movie, result);
             final Bitmap bitmap = result;
             if (!stopped && epoch == generation && bitmap != null) ui.post(() -> { if (!stopped && epoch == generation) target.setImageBitmap(bitmap); });
         });
@@ -81,9 +82,10 @@ final class ThumbnailLoader {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
         if (options.outWidth <= 1 || options.outHeight <= 1 || (long) options.outWidth * options.outHeight > 25000000L) return null;
         options.inJustDecodeBounds = false;
-        options.inSampleSize = Math.max(1, Math.max(options.outWidth / 480, options.outHeight / 320));
+        options.inSampleSize = sampleSize(options.outWidth,options.outHeight);
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
     }
+    static int sampleSize(int width,int height){int sample=1;while(width/(long)sample>480||height/(long)sample>320){if(sample>1<<28)break;sample*=2;}return sample;}
     private byte[] request(String start, boolean image, String userAgent, int limit) throws Exception {
         return request(start, image, userAgent, limit, null);
     }
@@ -128,3 +130,4 @@ final class ThumbnailLoader {
     }
     void close() { stopped = true; executor.shutdownNow(); ui.removeCallbacksAndMessages(null); }
 }
+
